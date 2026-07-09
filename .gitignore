@@ -1,0 +1,25 @@
+# Environment secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/.user.yml
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json

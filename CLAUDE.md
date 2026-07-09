@@ -703,13 +703,31 @@ The separate Federal Radar project pulls active grant data from NSF, NIH, and US
 
 ---
 
+## Mandatory: Project Context Log
+
+After every build step, append an entry to `docs/decisions.md`. Keep it high-level — what was built, why, key decisions, and anything left open. This is the source for future technical documentation, articles, and architecture diagrams.
+
+### Entry format
+
+```
+## [Phase N] [Short title] — [Date]
+
+### What was built
+### Why
+### Key decisions
+### Alternatives rejected
+### Open questions
+```
+
+---
+
 ## Process Rules
 
 - **New repo**: `nsf-herd-v2`. Never modify `nsf-herd-mvp`.
 - **One phase at a time**: Do not start Phase N+1 until Phase N is verified.
 - **Verify before moving on**: Each phase has a "Verify it works" section. Run it.
 - **Commit after each working step**: Small commits, clear messages.
-- **Document decisions**: When you make an architectural choice, add it to `docs/decisions.md`.
+- **Document decisions**: When you make an architectural choice, add it to `docs/decisions.md` — via the mandatory subagent above.
 - **No Claude co-author**: Do not include `Co-Authored-By: Claude` in commit messages.
 - **Ask one clarifying question max**: Then proceed.
 - **Understand before moving on**: After Claude generates code, read every line. If you can't explain it, ask Claude to explain before proceeding.
