@@ -76,3 +76,49 @@ The 6 Python ETL scripts in v1 had no tests, no documentation, and no dependency
 - All 3 data invariants confirmed clean across all 10,084 institution/year combinations
 
 ---
+
+## [Phase 3] FastAPI (partial) — 2026-07-07
+
+### What was built
+- `api/Dockerfile`, `api/requirements.txt` — FastAPI service, containerized
+- `api/main.py` — app factory, CORS, lifespan hook (opens/closes the Postgres pool, fits the KNN benchmarker once at startup)
+- `api/config.py` — env var loading via pydantic-settings
+- `api/db.py` — asyncpg connection pool + `rows_to_dicts()` helper (casts NUMERIC/Decimal columns to float for JSON)
+- `api/services/benchmarker.py` — KNN peer-matching, ported from v1 `src/benchmarker.py`; data now loads from Postgres (`stg_institutions`) instead of SQLite
+- `api/routers/institutions.py` — list, detail, rank trend, anchor (competitive band), funding breakdown, state rank
+- `api/routers/peers.py` — KNN peer IDs, gap analysis, historical peer trend
+- `api/routers/portfolio.py` — field portfolio, sub-field drilldown, field momentum (CAGR)
+- `api/routers/federal.py` — agency breakdown, trend, HHI concentration score
+- `api/routers/qa.py` — natural language Q&A, ported from v1 `src/query_engine.py`'s `ask()`/`generate_sql()`/`summarize_results()` pipeline (Gemini generates SQL → executes read-only → Gemini summarizes)
+- `docker-compose.yml` — added `api` service (port 8000, live-mounted code, depends on healthy Postgres)
+
+**Not yet built (deferred by explicit scope decision):** `scenarios`, `projections`, `briefing` routers/services. Institutions/peers/portfolio/federal/qa form the verified foundation; the new decision-engine features will be layered on top of these later.
+
+### Why
+Every query the old Streamlit app made directly against SQLite is now an HTTP endpoint, decoupling data access from any particular frontend. This is also the first layer where the Phase 2 dbt investment pays off directly: mart tables already precomputed ranks, CAGRs, and field shares, so most routers are thin `SELECT ... WHERE inst_id = $1` calls instead of re-deriving window functions per request like v1 did.
+
+### Key decisions
+- **Routers read from dbt marts, not staging** — `mart_rankings`, `mart_field_portfolio` etc. already have `RANK()`/CAGR precomputed. Only funding breakdown and agency detail (which need raw dollar columns, not just precomputed shares) hit `stg_*` views directly.
+- **Benchmarker fitted once at FastAPI startup, stored on `app.state`** — matches CLAUDE.md's "cache reads, never writes" rule. All peer-lookup requests reuse the same fitted KNN model instead of refitting per request (v1 relied on Streamlit's `@st.cache_resource` for the same effect).
+- **asyncpg pool built from keyword args, not a DSN string** — same fix as the Phase 1 `load_seed_data.py` bug: the Postgres password contains `@`, which breaks URL-style connection strings. Kept the fix consistent across the codebase.
+- **QA schema prompt points at `stg_*` views** — keeps the LLM's SQL flexible (ad hoc questions, not just precomputed marts) while staying consistent with dbt's staging layer naming.
+- **CAGR in hand-written/LLM SQL uses the `value * 1.0` trick, not explicit `::FLOAT` casts** — in Postgres, `1.0` is a NUMERIC literal, so `POWER(x * 1.0 / y, ...)` returns NUMERIC and `ROUND()` works directly. The dbt CAGR macro (Phase 2) broke because it explicitly cast to `FLOAT` first; this was avoided here by not doing that.
+- **`time.sleep()` swapped for `await asyncio.sleep()`** in the Gemini retry backoff — a blocking call inside an `async def` would freeze the entire event loop, not just one request.
+- **QA endpoint returns `503` (not a crash) when `GEMINI_API_KEY` is unset** — the API stays usable for every other router even without an LLM key configured.
+
+### Alternatives rejected
+- Recomputing ranks/CAGR in Python inside the API layer (matching v1's approach) — rejected because dbt already computed and materialized these; recomputing would duplicate logic and drift from the tested dbt models.
+- Synchronous psycopg2 (matching v1/Phase 1 scripts) — rejected in favor of asyncpg + connection pooling, since FastAPI is async end-to-end and CLAUDE.md requires "no blocking operations in API handlers."
+- Building `scenarios`/`projections`/`briefing` alongside the rest of Phase 3 — explicitly deferred at the user's request to keep the phase scoped and verifiable in smaller steps.
+
+### Open questions
+- `/qa/ask` has no rate limiting yet (v1 had 50/hour per user) — blocked on an auth layer that doesn't exist yet in v2.
+- Gemini API key was copied directly from `nsf-herd-mvp/.env` into `nsf-herd-v2/.env` for convenience — fine for local dev, should be rotated/secured before any real deployment.
+- DuckDB (Phase 4) not yet wired in; all analytical queries currently run on Postgres directly, which is fine at current data volume (~300K rows) but scenarios/projections may want DuckDB's speed later.
+- `scenarios`, `projections`, `briefing` endpoints remain unbuilt — next planned work.
+
+### Results
+- 5 routers live: institutions, peers, portfolio, federal, qa
+- Verified against real data: UNT (`inst_id=003594`) rank trend, anchor view, peer gap, field momentum, agency concentration, and two natural-language QA queries (including one with session context) all returned correct results
+- `/docs` (Swagger UI) confirmed working
+
