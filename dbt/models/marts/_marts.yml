@@ -1,0 +1,67 @@
+version: 2
+
+models:
+  - name: mart_rankings
+    description: National and state rank per institution per year. Foundation for all peer logic.
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+      - name: year
+        tests:
+          - not_null
+      - name: national_rank
+        tests:
+          - not_null
+      - name: state_rank
+        tests:
+          - not_null
+
+  - name: mart_peer_metrics
+    description: Per-institution CAGR and rank change over the configured year window.
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+          - unique
+      - name: national_rank
+        tests:
+          - not_null
+
+  - name: mart_field_portfolio
+    description: Field share of total R&D per institution per year (parent fields only).
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+      - name: year
+        tests:
+          - not_null
+      - name: field_code
+        tests:
+          - not_null
+      - name: field_share_pct
+        tests:
+          - not_null
+
+  - name: mart_peer_movement
+    description: Rank trajectory and convergence signals per institution over the window.
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+          - unique
+      - name: rank_current
+        tests:
+          - not_null
+
+  - name: mart_trajectories
+    description: Forward projection of R&D totals at current growth rates (1, 2, 3 years).
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+          - unique
+      - name: baseline_total_rd
+        tests:
+          - not_null

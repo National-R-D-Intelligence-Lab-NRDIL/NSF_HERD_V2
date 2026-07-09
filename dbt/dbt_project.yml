@@ -1,0 +1,28 @@
+name: 'nsf_herd'
+version: '1.0.0'
+config-version: 2
+
+profile: 'nsf_herd'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Default year window used across mart models.
+# Override at run time: dbt run --vars '{"end_year": 2023}'
+vars:
+  start_year: 2019
+  end_year: 2024
+
+models:
+  nsf_herd:
+    staging:
+      +materialized: view      # cheap — always fresh from raw tables
+    marts:
+      +materialized: table     # pre-computed — fast for the API to query

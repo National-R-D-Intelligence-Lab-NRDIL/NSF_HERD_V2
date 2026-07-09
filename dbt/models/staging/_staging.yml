@@ -1,0 +1,87 @@
+version: 2
+
+sources:
+  - name: herd
+    description: Raw HERD data loaded from the NSF survey microdata
+    schema: public
+    tables:
+      - name: raw_institutions
+        description: One row per institution per year — total R&D and funding source breakdown
+      - name: raw_field_expenditures
+        description: R&D spending per institution per year broken down by field (parent + sub-fields)
+      - name: raw_agency_funding
+        description: Federal R&D spending per institution per year broken down by agency
+
+models:
+  - name: stg_institutions
+    description: Cleaned institution-level R&D totals. One row per inst_id/year.
+    columns:
+      - name: inst_id
+        description: NSF institution identifier — stable across all years
+        tests:
+          - not_null
+      - name: year
+        description: Survey year
+        tests:
+          - not_null
+          - accepted_values:
+              values: [2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020,2021,2022,2023,2024]
+      - name: total_rd
+        tests:
+          - not_null
+      - name: federal
+        tests:
+          - not_null
+      - name: state_local
+        tests:
+          - not_null
+      - name: business
+        tests:
+          - not_null
+      - name: nonprofit
+        tests:
+          - not_null
+      - name: institutional
+        tests:
+          - not_null
+      - name: other_sources
+        tests:
+          - not_null
+
+  - name: stg_field_expenditures
+    description: Cleaned field-level R&D expenditures. One row per inst_id/year/field_code.
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+      - name: year
+        tests:
+          - not_null
+      - name: field_code
+        tests:
+          - not_null
+      - name: is_parent
+        description: 1 = top-level field category, 0 = sub-field discipline
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+      - name: total
+        tests:
+          - not_null
+
+  - name: stg_agency_funding
+    description: Cleaned agency-level federal R&D funding. One row per inst_id/year/agency_code.
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+      - name: year
+        tests:
+          - not_null
+      - name: agency_code
+        tests:
+          - not_null
+      - name: amount
+        tests:
+          - not_null
