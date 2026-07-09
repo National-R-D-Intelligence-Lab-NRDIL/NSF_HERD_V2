@@ -282,7 +282,27 @@ rank_changes AS (
 
 ## Build Phases
 
-### Phase 1: Docker + Postgres (Foundation)
+### Current Status (as of 2026-07-08)
+
+Phases were **not** built strictly in the order below. Actual build order:
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1. Docker + Postgres | ✅ Done | |
+| 2. dbt Core | ✅ Done | 8 models, 40 tests passing |
+| 3. FastAPI | ⏸ Partial | institutions/peers/portfolio/federal/qa built; `scenarios`, `projections`, `briefing` (Features 1, 3, 4) explicitly deferred |
+| 4. DuckDB | ⬜ Not started | Skipped in favor of Phase 7 — revisit before Features 1/3 (scenario/projection) can be built |
+| 5. Dagster | ⬜ Not started | Skipped in favor of Phase 7 |
+| 6. GitHub Actions CI | ⬜ Not started | Skipped in favor of Phase 7 |
+| 7. Frontend | ✅ Done | Built immediately after Phase 3, ahead of Phases 4–6. Next.js/React chosen over Reflex (see decision below). Full v1 parity + one new feature (per-institution suggested questions) |
+
+**Why the order changed**: after Phase 3 shipped a usable read API, the call was made to get a demoable end-to-end product (API + UI) working before investing in DuckDB/Dagster/CI, which have no user-visible payoff on their own. Phases 4–6 are not abandoned — see the revisit trigger logged in `docs/decisions.md` ("[Phase 7] Frontend stack reaffirmed").
+
+**Revisit trigger**: now that Phase 7 is live and validated, next work should return to either (a) Phases 4–6 in order, or (b) Feature 1/2/3/4 (scenarios, peer movement, projections, briefing) directly — DuckDB (Phase 4) is a prerequisite for Features 1 and 3 specifically. Decide explicitly before starting; don't let this drift again.
+
+---
+
+### Phase 1: Docker + Postgres (Foundation) — ✅ Done
 
 **Goal**: One command (`docker compose up`) gives you a running Postgres with the HERD schema.
 
@@ -313,7 +333,7 @@ docker compose exec postgres psql -U herd -d herd_db -c "SELECT COUNT(*) FROM in
 
 ---
 
-### Phase 2: dbt Core (Transformation + Tests)
+### Phase 2: dbt Core (Transformation + Tests) — ✅ Done
 
 **Goal**: Replace the 6 Python ETL scripts with SQL models that are tested and documented.
 
@@ -368,9 +388,11 @@ dbt docs generate && dbt docs serve  # visual DAG + docs
 
 ---
 
-### Phase 3: FastAPI (API Layer)
+### Phase 3: FastAPI (API Layer) — ⏸ Partial
 
 **Goal**: Every query the Streamlit app makes is now an HTTP endpoint.
+
+**Status**: `institutions`, `peers`, `portfolio`, `federal`, `qa` routers are built and verified. `scenarios`, `projections`, `briefing` (Features 1, 3, 4 below) are explicitly deferred — not forgotten. `projections`/`scenarios` also depend on Phase 4 (DuckDB) per the original design.
 
 **Files to create**:
 - `api/Dockerfile`
@@ -436,7 +458,7 @@ curl http://localhost:8000/docs                  # Swagger UI
 
 ---
 
-### Phase 4: DuckDB (Analytical Layer)
+### Phase 4: DuckDB (Analytical Layer) — ⬜ Not started
 
 **Goal**: Heavy analytical queries (peer comparisons, CAGR computations, scenario simulations) run on DuckDB for speed.
 
@@ -467,7 +489,7 @@ result = conn.execute("SELECT COUNT(*) FROM pg.institutions").fetchone()
 
 ---
 
-### Phase 5: Dagster (Orchestration)
+### Phase 5: Dagster (Orchestration) — ⬜ Not started
 
 **Goal**: One command runs the entire pipeline — ingestion, dbt build, dbt test — with lineage and observability.
 
@@ -502,7 +524,7 @@ def herd_dbt_assets(context, dbt: DbtCliResource):
 
 ---
 
-### Phase 6: GitHub Actions (CI/CD)
+### Phase 6: GitHub Actions (CI/CD) — ⬜ Not started
 
 **Goal**: Every push runs dbt tests. A green badge proves the data pipeline is healthy.
 
@@ -528,18 +550,21 @@ def herd_dbt_assets(context, dbt: DbtCliResource):
 
 ---
 
-### Phase 7: Frontend (React or Reflex)
+### Phase 7: Frontend (React or Reflex) — ✅ Done
 
 **Goal**: Replace Streamlit with a modern frontend that calls the FastAPI backend.
 
-**Two options**:
+**Decision made**: Option B (React + Next.js). Built and reaffirmed even after discovering the project owner doesn't yet know TypeScript — reasoning and trade-off logged in `docs/decisions.md` ("[Phase 7] Frontend stack reaffirmed"); `docs/learning.md` added as a primer to offset the maintainability gap. Full v1 feature parity reached (Snapshot, Portfolio, Federal, Ask tabs) plus one feature beyond v1 (per-institution suggested questions).
+
+**Two options considered**:
 
 **Option A: Reflex (Python bridge — learn React patterns without JavaScript)**
 - Write in Python, compiles to React
 - Good stepping stone if JavaScript is new
 - Less impressive on resume than pure React but teaches the right mental models
+- **Rejected** — would have thrown away the already-built, already-verified Next.js app
 
-**Option B: React + Next.js (production standard)**
+**Option B: React + Next.js (production standard)** — **chosen**
 - TypeScript, component model, state management
 - Recharts or Plotly React for charts
 - Supabase Auth SDK for login
@@ -724,7 +749,7 @@ After every build step, append an entry to `docs/decisions.md`. Keep it high-lev
 ## Process Rules
 
 - **New repo**: `nsf-herd-v2`. Never modify `nsf-herd-mvp`.
-- **One phase at a time**: Do not start Phase N+1 until Phase N is verified.
+- **One phase at a time**: Do not start a new phase until the current one is verified (or explicitly, intentionally deferred). Phases don't have to run in the listed order, but any reordering or skip must be a deliberate call, logged in `docs/decisions.md`, and reflected in the status table under "Build Phases" — not a silent drift.
 - **Verify before moving on**: Each phase has a "Verify it works" section. Run it.
 - **Commit after each working step**: Small commits, clear messages.
 - **Document decisions**: When you make an architectural choice, add it to `docs/decisions.md` — via the mandatory subagent above.
