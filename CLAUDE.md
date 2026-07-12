@@ -280,6 +280,174 @@ rank_changes AS (
 
 ---
 
+## User Personas
+
+The tool serves a wider audience than just VPRs. Below is the full map of personas in the university research ecosystem who would use R&D positioning intelligence, organized by tier (frequency of use + decision-making leverage). This informs UI design — different personas need different views, outputs, and interaction patterns.
+
+### Tier 1: Primary Users (weekly/monthly, high decision leverage)
+
+**Vice President for Research (VPR) / Chief Research Officer**
+- Also titled: VP for Research & Innovation, VP for Research & Economic Development, Associate Provost for Research
+- Cares about: National rank, peer benchmarking, portfolio balance, growth trajectory, federal funding mix
+- Uses tool for: Budget justification to provost, strategic planning, board presentations, identifying investment gaps
+- Key question: "Where should our next dollar go to move us the most?"
+- Frequency: Weekly during planning season, monthly otherwise
+
+**Associate/Assistant VP for Research**
+- Cares about: Same as VPR but more operational — translating strategy into programs
+- Uses tool for: Building the case for new initiatives (seed grants, cluster hires), monitoring whether investments are paying off year-over-year
+- Key question: "Is our 3-year investment in Engineering showing up in the numbers yet?"
+- Frequency: Weekly
+
+**Associate Dean for Research (college-level)**
+- One per college (Engineering, Sciences, Liberal Arts, Medicine, etc.)
+- Cares about: Their specific field's national position, not the whole institution
+- Uses tool for: Justifying resource requests to their dean, understanding which sub-fields are growing nationally, comparing their college to peer college equivalents
+- Key question: "Where does our Engineering school rank among our peer set's Engineering schools?"
+- Frequency: Monthly, heavily during annual budget cycle
+
+**Dean (of a research-intensive college)**
+- Cares about: College-level totals, faculty productivity context, making the case for new lines/space
+- Uses tool for: Strategic hire justification ("peer institutions have 15 more Engineering faculty and outspend us by $40M"), provost conversations about investment priorities
+- Key question: "What's the gap between us and our aspirational peers in my college's fields?"
+- Frequency: Quarterly, heavily at budget time
+
+### Tier 2: Strategic Decision-Makers (monthly/quarterly, high influence)
+
+**Provost / Executive VP for Academic Affairs**
+- Cares about: Institution-wide positioning, ROI on research investments, balancing research vs teaching missions
+- Uses tool for: Consuming briefings (not building them), comparing VPR's requests against data, board of trustees presentations
+- Key question: "Is our research enterprise growing faster or slower than peers, and is VPR's budget request justified?"
+- Frequency: Quarterly (reads briefings, doesn't explore dashboards)
+- UI implication: Needs the narrative export / PDF briefing, not interactive exploration
+
+**President / Chancellor (single institution)**
+- Cares about: Headline rank, trajectory, peer comparisons for speeches/fundraising
+- Uses tool for: Talking points for donors, legislators, and boards. "We've grown research 40% in 5 years, outpacing all but 3 peers."
+- Key question: "What's the one-sentence version of where we stand?"
+- Frequency: Quarterly (consumes summaries only)
+- UI implication: Executive summary card / one-page brief, not a dashboard
+
+**System Chancellor (multi-institution: UC, SUNY, Texas, UNC)**
+- Cares about: Portfolio across 5–15 institutions, avoiding duplication, system-wide rank, state competitiveness
+- Uses tool for: Coordinating investment across institutions ("UT Arlington should grow Engineering since UT Austin owns that space — what about Materials?"), state legislature presentations
+- Key question: "How does our system perform against other state systems, and where are the internal gaps/overlaps?"
+- Frequency: Quarterly
+- UI implication: Multi-institution comparison view (doesn't exist yet)
+
+**Board of Trustees / Regents**
+- Cares about: Is the institution gaining or losing ground? Are we spending wisely?
+- Uses tool for: They don't use it directly — they receive briefings. But the data shapes what they see.
+- UI implication: PDF/slide export that a VPR or president hands them
+
+### Tier 3: Research Administration & Development (weekly, operational)
+
+**Director of Research Development**
+- Cares about: Institutional strengths/weaknesses for limited submission decisions, proposal boilerplate, identifying emerging federal priorities
+- Uses tool for: Writing "institutional capacity" sections of proposals, deciding which internal candidates to put forward for limited submissions, tracking whether the institution is competitive in a field before investing effort
+- Key question: "Are we credible enough in field X to win a center-level award, or are we a long shot?"
+- Frequency: Weekly (proposal deadlines are constant)
+- UI implication: Quick field-level lookup, exportable stats for copy-paste into proposals
+
+**Research Development Officers / Pre-Award Staff**
+- Cares about: Specific data points for specific proposals (rank in field, growth rate, federal agency funding)
+- Uses tool for: Pulling stats into grant narratives. "PI needs a paragraph about our institution's NSF funding trajectory."
+- Key question: "What's our exact rank in [field] and how much NSF funding did we receive last year vs 5 years ago?"
+- Frequency: Multiple times per week
+- UI implication: Search → stat → copy. Minimal clicks to a quotable number.
+
+**Director of Sponsored Programs / Office of Sponsored Research**
+- Cares about: Proposal volume, success rates (not in HERD data), federal funding concentration risk
+- Uses tool for: Understanding institutional dependency on specific agencies, flagging if one agency represents too much of the portfolio
+- Key question: "If NIH flat-funds for 3 years, how exposed are we vs peers?"
+- Frequency: Monthly
+
+**Government Relations / Federal Affairs Officer**
+- Cares about: Talking points for congressional visits, positioning the institution for federal earmarks/programs
+- Uses tool for: "Senator, our institution ranks #X in federal R&D in your state, and we've grown Y% — here's what continued investment enables"
+- Key question: "How do we rank within our state and congressional district for federal R&D?"
+- Frequency: Quarterly (aligned with Hill visits, appropriations cycles)
+- UI implication: State-level and agency-level views, exportable one-pagers
+
+### Tier 4: Adjacent Institutional Roles (monthly, supporting)
+
+**Director of Institutional Research (IR)**
+- Cares about: Data accuracy, survey compliance, benchmarking for accreditation
+- Uses tool for: Cross-referencing HERD data with IPEDS, Carnegie, and internal data; validating their own reporting
+- Key question: "Does our internally reported R&D match what NSF published? How do we compare on research intensity metrics?"
+- Frequency: Monthly, heavily at survey/accreditation time
+
+**Technology Transfer Officer (TTO/OTT Director)**
+- Cares about: Research volume as input to commercialization pipeline, field-level investment as predictor of IP output
+- Uses tool for: Context on where institutional research investment is going (upstream of their licensing/patents work)
+- Key question: "Which fields are growing fastest in expenditure? That's where our disclosure pipeline should thicken."
+- Frequency: Quarterly
+
+**VP for Advancement / Development (Fundraising)**
+- Cares about: Narrative for major gift asks, research growth story for campaigns
+- Uses tool for: "We've invested $X in Y and moved Z ranks — your naming gift accelerates that trajectory"
+- Key question: "What's the most compelling growth story I can tell a donor about our research enterprise?"
+- Frequency: Quarterly
+- UI implication: Narrative/story mode, not analytical mode
+
+**Graduate School Dean**
+- Cares about: Research expenditure as proxy for PhD student support capacity, field-level growth indicating where new programs should launch
+- Uses tool for: Justifying new PhD programs ("national investment in this field is growing 12% CAGR — we should be training students here")
+- Key question: "Which fields are growing fastest nationally? Do we have PhD programs in those fields?"
+- Frequency: Annually (program planning cycles)
+
+**Communications / PR Director**
+- Cares about: Press release hooks ("University reaches record R&D spending," "Fastest-growing research enterprise in the state")
+- Uses tool for: Finding the superlative — whatever "first," "fastest," or "largest" claim is defensible
+- Key question: "What's newsworthy about our latest HERD numbers?"
+- Frequency: Annually (when NSF releases new data)
+
+### Tier 5: External / Multi-Institutional (less frequent, different access model)
+
+**State Higher Ed Board / Coordinating Board Staff**
+- Cares about: State-wide research capacity, inter-institution coordination, legislative reporting
+- Uses tool for: "Here's how our state's research enterprise compares to competing states (Texas vs California, Ohio vs Michigan)"
+- Key question: "Is our state gaining or losing share of national R&D? Which institutions are driving that?"
+- UI implication: State-level aggregate view, multi-institution roll-up
+
+**State Legislative Staff (Appropriations / Higher Ed Committees)**
+- Cares about: ROI on state appropriations to universities, inter-state competition
+- Uses tool for: Briefing legislators before budget votes — "our flagship has grown R&D $X since the state invested $Y"
+- Key question: "Are our public universities competitive with peer states?"
+- Frequency: Annually (budget cycle)
+
+**Professional Associations (AAU, APLU, COGR)**
+- Cares about: Sector-wide trends, advocacy data for federal funding
+- Uses tool for: Reports like "Federal research funding hasn't kept pace with..." using aggregate HERD data
+- Key question: "What's the national trend in [metric] and how do our member institutions compare?"
+- Frequency: Annually
+
+**Consulting Firms / Higher Ed Strategy (e.g., EAB, Huron, rpk GROUP)**
+- Cares about: Benchmarking clients, identifying growth opportunities
+- Uses tool for: Same analysis VPRs do, but for multiple client institutions
+- Key question: "Where are the gaps in Client X's portfolio relative to aspirational peers?"
+- UI implication: Multi-institution workspace, client-by-client saved views
+
+### UI Implications by Persona Cluster
+
+| Cluster | What they need from the UI | Current coverage |
+|---|---|---|
+| VPR / AVP / Assoc Dean | Full interactive dashboard, scenario modeling, peer selection | Most of this exists |
+| Dean / Provost / President | Briefing documents, executive summaries, 1-page exports | Planned (Feature 4) but not built |
+| Research Development | Quick stat lookup, copy-paste numbers, field-level search | Partially covered (portfolio tab) |
+| Government Relations / Advancement | Narrative + data points for external audiences, state-level views | Minimal (state rank exists, no export) |
+| System Chancellor / State Board | Multi-institution comparison, state-level aggregate | Does not exist |
+| Board / Trustees | PDF briefing they receive, not a login | Planned (Feature 4) |
+| Consulting / External | Multi-client workspace, saved comparisons | Does not exist |
+
+### Key Gaps (current UI vs full persona map)
+
+1. **Single-institution assumption** — the tool currently assumes one user looking at one institution at a time. System-level, state-level, and multi-institution views are an entirely different mode that doesn't exist yet.
+2. **Output/export layer** — most personas above Tier 3 don't want to explore a dashboard; they want to receive a document (PDF briefing, slide deck, one-pager with stats).
+3. **Quick-stat mode** — Research Development officers need search → number → copy in under 10 seconds. The current dashboard is built for exploration, not extraction.
+
+---
+
 ## Build Phases
 
 ### Current Status (as of 2026-07-08)
