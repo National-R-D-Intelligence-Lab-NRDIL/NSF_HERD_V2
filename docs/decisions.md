@@ -179,3 +179,122 @@ The user asked for exact v1 fidelity on Portfolio/Federal, then asked whether th
 ### Results
 - Clean `npm run build` (zero TypeScript errors) after each of the three rounds.
 - Both new peer-comparison endpoints and the new suggested-questions endpoint verified against live data (Johns Hopkins `029977`, UNT `003594`) after restarting the API container — confirmed genuinely different markers/questions per institution.
+
+---
+
+## [Feature 5] Peer Benchmarking Classification Filters — 2026-07-11
+
+### What was built
+- New Postgres table `raw_institution_classifications` — stores Carnegie class, public/private control, medical school flag, and membership booleans (AAU, APLU, HBCU, HSI, EPSCoR)
+- dbt seed CSVs: `seed_aau_members.csv`, `seed_aplu_members.csv`, `seed_epscor_states.csv`
+- Bootstrap script `scripts/load_classifications.py` — heuristically assigns Carnegie class from R&D thresholds, detects medical schools via life_sciences dominance (>60%), and merges membership lists
+- dbt staging model `stg_institution_classifications.sql` with schema tests and accepted_values constraints
+- dbt coverage test `assert_classification_coverage.sql` — warns if >5% of institutions lack classification data
+- Extended `AutoBenchmarker` with filtered peer matching — when filters are provided, bypasses pre-fitted KD-tree and uses brute-force `scipy.cdist` on the masked subset (sub-millisecond for ~1,000 institutions)
+- Updated `/peers/{inst_id}` (and `/gap`, `/trend`) with optional filter query params: `carnegie`, `control`, `exclude_med`, `aau_only`, `aplu_only`, `hbcu_only`, `hsi_only`, `epscor_only`
+- New router `api/routers/classifications.py` — `GET /classifications/{inst_id}` and `GET /classifications/options`
+- Response now includes `candidate_pool_size` (total and filtered count)
+- Frontend `PeerFilterPanel.tsx` — collapsible filter panel with Carnegie multi-select, control toggle, med school exclusion, and membership checkboxes; shows pool size badge
+
+### Why
+Medical-heavy institutions (Johns Hopkins, UCSF) were appearing as peers for comprehensive universities because KNN matches on funding size alone. A $180M comprehensive university matched with a $180M clinical-trials-only institution — not meaningful peers. Classification filters let users narrow the candidate pool before distance computation.
+
+### Key decisions
+- **Single wide table, not normalized** — ~1,000 rows, 10 columns. No need for join tables for boolean flags.
+- **Brute-force over pre-fitted trees** — With 1,004 institutions and 7 features, cdist on a filtered subset is sub-millisecond. No need to maintain multiple KD-trees per filter combination.
+- **Backward compatible** — No filters = same KNN results as before. Existing API consumers unaffected.
+- **Heuristic bootstrap** — Carnegie class assigned by R&D thresholds ($50M+ = R1, $5M+ = R2). Real Carnegie uses doctoral output, but this is a reasonable proxy until the full Carnegie Excel is integrated.
+- **Medical school detection via life_sciences share** — >60% of total R&D in life_sciences is a strong signal. Not perfect, but catches the worst offenders (health science centers).
+- **Filter panel hidden in custom peer mode** — When users manually select peers, classification filters don't apply (they've already chosen their peers).
+
+### Alternatives rejected
+- **Separate pre-fitted models per filter combo** — Combinatorial explosion (2^8 filter combos). Brute-force is fast enough.
+- **Server-side filter persistence (database)** — Over-engineering for now. Filters live in React state and URL params.
+- **Hard-coding Carnegie from a static CSV** — Would go stale. The bootstrap script is re-runnable when new data arrives.
+
+### Open questions
+- HBCU and HSI flags are defaulted to FALSE — need IPEDS data or manual curation to populate
+- UNITID crosswalk is NULL (placeholder) — real Carnegie integration requires downloading the Excel and mapping via HERD public use files
+- Should the filter state persist in URL query params for shareable links? (deferred to frontend polish pass)
+
+---
+
+## [Frontend] Peer-set UX unification + historical year exploration — 2026-07-12
+
+### What was built
+- **Unified Peer Set card** — `PeerFilterPanel` moved out of `SnapshotTab.tsx` and into the same card as `CustomPeerSelector` in `page.tsx`, so custom peer selection and classification filters live in one place instead of two separate, easy-to-miss UI locations. Removed the now-duplicated `poolSize`/`PeerFilterPanel` logic that had been living inside `SnapshotTab`.
+- **Peer-set caveat copy** — added short caveat text to `PortfolioTab.tsx` and `FederalTab.tsx` clarifying that field/agency comparisons reflect whichever peer set (default KNN, filtered, or custom) is currently active.
+- **Landing KPIs follow the active peer set** — the landing KPI card and callout in `SnapshotTab.tsx` previously used a hardcoded stats object; now driven by `peerTrend.stats`, so the headline numbers always match the peer group shown elsewhere on the page.
+- **Data vintage / publication-lag disclosure** — header in `page.tsx` now states the survey year range and that NSF publishes HERD data on roughly an 18-month lag, with a dynamic note when the user is viewing a year other than the latest.
+- **Historical year selector** — new `viewYear` state and `VIEW_YEARS` dropdown in `page.tsx` (2010–2024), threaded through `InstitutionPicker`, `CustomPeerSelector`, and all tabs, so the whole dashboard can be viewed as of any past survey year, not just the latest.
+- **Two-year side-by-side compare** — new `YearCompare.tsx` component: pick any two years, see national rank / total R&D / federal funding side by side with deltas. Embedded in `SnapshotTab.tsx` behind a collapsible toggle.
+
+### Why
+The peer-set controls had drifted into two disconnected places (custom picker in the page shell, classification filters inside one tab), which made it easy to change one without noticing the other. The historical year work came from a separate observation: the dashboard only ever showed the latest year, with no way to look back or compare periods, even though the underlying data goes back to 2010.
+
+### Key decisions
+- **Single source of truth for peer set** — peer selection (custom or filtered) now lives entirely in `page.tsx` state and is passed down as props; tabs no longer maintain their own copies of pool size or filter state.
+- **Landing stats sourced from the same peer-trend call already used elsewhere** — avoided introducing a second "landing stats" computation path that could silently diverge from the Peer Analysis section.
+- **Year selector reuses existing endpoints' `year` param** — no backend changes needed; `viewYear` just changes which year is requested from already-existing endpoints.
+- **Two-year compare is a new component, not a mode of the existing rank chart** — keeps the existing trend chart's behavior untouched and makes the comparison feature easy to collapse/hide.
+
+### Alternatives rejected
+- Keeping classification filters inside `SnapshotTab` only — rejected because Portfolio and Federal tabs also depend on the active peer set; a tab-local filter UI implied (incorrectly) that the filter only affected that one tab.
+- Building historical year support as a single "start/end" range picker only — rejected in favor of a dedicated two-year compare view, since the existing growth-window selector already covers the "trend over N years" case; side-by-side comparison of two arbitrary years is a distinct question.
+
+### Open questions
+- None of this session's peer-set/year-selector work has dedicated automated tests yet — verified manually against UNT and a couple of other institutions.
+
+---
+
+## [Feature 4] Narrative Briefing — reduced scope — 2026-07-12
+
+### What was built
+- `api/services/narrative.py` — gathers rank trend, CAGR vs. the currently active peer group (default KNN, filtered by `n`, or custom peer IDs — same resolution pattern as `/institutions/{inst_id}/insight`), closest peer by rank within that group (with the current dollar gap), largest field, and top federal agency. Passes this to Gemini with a prompt scoped to a fixed 5-part JSON structure (headline, growth vs. peers, peer landscape, portfolio signal, federal signal) plus a footnote assembled in code.
+- `api/routers/briefing.py` — `GET /briefing/{inst_id}`, registered in `main.py`. Returns the JSON briefing; no PDF work happens server-side.
+- Frontend: `getBriefing()` in `lib/api.ts`, `BriefingResponse`/`BriefingSection` types, and a new `BriefingButton.tsx` component that calls the endpoint and renders a one-page PDF via a lazy (`import()`-on-click) `jspdf` dependency, then triggers a browser download. Wired into `page.tsx` next to the tab bar.
+
+### Why
+CLAUDE.md's original Feature 4 spec assumes Features 1 (Scenario Modeling) and 3 (Forward Projection) already exist ("+$5M would move us to #132", "projected to overtake us by FY2027") — neither is built, and both are blocked on Phase 4 (DuckDB), which was explicitly skipped in favor of Phase 7. Rather than wait on that dependency chain, the briefing was scoped down to only what's honestly computable from data that exists today.
+
+### Key decisions
+- **Option "a" (reduced scope), not full CLAUDE.md spec** — the briefing states current rank, historical CAGR vs. peers, and the present dollar gap to the nearest-ranked peer (all backward-looking facts), but never states or implies a future crossover year or a hypothetical investment's effect. The Gemini prompt includes explicit rules forbidding both, mirroring/extending the "never use risk/warning/concern" guardrail pattern already used in `institutions.py`'s `/insight` endpoint.
+- **Option 2 structure (condensed one-pager)**, not a tab-by-tab mirror of the dashboard — header, headline, growth-vs-peers, peer landscape, portfolio signal, federal signal, footnote. Keeps the output usable as an actual one-page document rather than a re-export of every chart.
+- **`GET`, not `POST /briefing/generate`** — there's no simulation input to submit; the endpoint just reads whichever peer group is currently active, so it follows the same `GET` convention as `/insight` and `/suggested-questions`.
+- **PDF rendering is client-side (`jsPDF`), not server-side (`fpdf2`)** — decided specifically to avoid adding a PDF-generation dependency and CPU work to the API container for something that only needs to run once, in the user's browser, on click. `jsPDF` is dynamically imported so it's excluded from the initial JS bundle.
+- **JSON parsing with a fallback** — if Gemini's response isn't valid JSON (rare, but not guaranteed), the service falls back to a minimal briefing assembled directly from the computed data rather than failing the request outright.
+
+### Alternatives rejected
+- Building the full CLAUDE.md-spec'd briefing (scenario + projection sections) now — rejected; would require building Features 1/3 and Phase 4 (DuckDB) first, none of which were in scope for this pass.
+- Server-side PDF generation (`fpdf2`) — rejected to keep the API lightweight and avoid a server-side rendering dependency for a document that's naturally a client-side, one-time render.
+- LLM-generated JSON via a strict response schema (`response_mime_type="application/json"`) — considered, but the codebase's existing Gemini usage (`qa.py`, `institutions.py`) doesn't use structured output mode anywhere; kept the same prompt-and-parse pattern for consistency, with a plain-data fallback covering the failure case.
+
+### Open questions
+- Features 1 (Scenario Modeling), 2 (Peer Movement Tracker), and 3 (Forward Projection) remain unbuilt; the briefing will need a follow-up pass once those exist and Phase 4 (DuckDB) is built, per the revisit trigger logged in CLAUDE.md's Build Phases status table.
+- No automated tests yet for `narrative.py` or `/briefing/{inst_id}` — verified manually against UNT (`inst_id=003594`).
+
+---
+
+## [Feature 4] Narrative Briefing — content & layout pass — 2026-07-12
+
+### What was built
+- Backend (`api/services/narrative.py`): added `state_rank` to the `mart_rankings` query; built a deterministic `peer_table` (target institution + up to 7 nearest-by-rank peers, sorted by rank); exposed the already-fetched rank series as `rank_trend` (year/national_rank/total_rd); computed a non-LLM `key_metrics` list (National Rank, State Rank, Total R&D, Growth CAGR vs. peer avg, Federal Share vs. national median, Largest Field). Softened the Gemini headline prompt (added an explicit rule) so it states rank movement neutrally instead of framing it as a "positive trajectory" when growth actually trails the peer average.
+- Frontend types (`frontend/lib/types.ts`): extended `BriefingResponse` with `key_metrics`, `peer_table`, `rank_trend`.
+- Frontend PDF (`frontend/components/BriefingButton.tsx`): full `renderPdf()` rewrite — accent-color header bar, shaded headline callout box, a 2-column Key Metrics grid, a Peer Comparison table (target row highlighted), a hand-drawn Total R&D trend line chart (native jsPDF `line()` calls, no charting library dependency), the existing narrative sections retained, and a footer (generated date + page number) applied to every page via a pagination helper that adds a new page when content would overflow the bottom margin.
+
+### Why
+User feedback on the first version (3 screenshots) was that the one-page PDF was mostly white space and didn't serve the documented personas in CLAUDE.md: VPRs need a real peer table (not prose naming one "closest peer"), Government Relations/state-facing personas were missing state rank entirely (it exists in `/insight` but had been dropped from the briefing), and Research Development needs scannable stats, not paragraphs. A secondary issue was flagged during review: the headline could read as spin (claiming a "positive trajectory" adjacent to below-peer-average growth data) — fixed by making the prompt's language rules stricter.
+
+### Key decisions
+- **key_metrics, peer_table, and rank_trend are computed in Python, not by Gemini** — same "deterministic over LLM-generated" principle already used for `suggested-questions`; guarantees the numbers on the page can't be hallucinated, and keeps the LLM scoped to the 5 prose sections only.
+- **Peer table shows up to 7 nearest-by-rank peers**, not the full active peer set — keeps the one-page (or two-page, with pagination fallback) document scannable rather than dumping the entire KNN/custom peer list.
+- **Chart is hand-drawn with jsPDF primitives**, not a charting library — avoids adding a new dependency for one static line, consistent with the existing "jsPDF is lazy-loaded, keep it lightweight" decision from the original Feature 4 pass.
+- **Pagination helper (`ensureSpace`)** added since the fuller layout (metrics grid + peer table + chart + narrative) no longer reliably fits on one page for institutions with longer prose or larger peer tables; footer (date + page number) is applied in a final pass over all pages after content renders.
+
+### Alternatives rejected
+- Keeping the briefing capped to exactly one page — rejected once the added tables/chart made that infeasible for all institutions; a pagination fallback was chosen over truncating content or shrinking fonts further.
+- Third-party PDF charting (e.g. jsPDF plugins) for the trend line — rejected as unnecessary weight for a single line series.
+
+### Open questions
+- Same as prior briefing entry: Features 1/2/3 (scenario modeling, peer movement, projections) and Phase 4 (DuckDB) are still unbuilt; this briefing remains backward-looking only.
+- No automated tests yet for the new `key_metrics`/`peer_table`/`rank_trend` fields — verified manually via `curl` against `inst_id=003594` after `docker compose restart api`, and `tsc --noEmit` passes clean on the frontend.

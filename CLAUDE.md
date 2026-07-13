@@ -262,6 +262,14 @@ rank_changes AS (
 
 **What you learn**: LLM prompt engineering for structured output, document generation, API design for complex responses.
 
+**Status (as of 2026-07-12): built in reduced scope.** The user story above assumes Features 1 (Scenario Modeling) and 3 (Forward Projection) already exist — they don't, and both are still blocked on Phase 4 (DuckDB). Rather than wait, the briefing was built against only what's computable today:
+- No "projected to overtake us by FY2027 at current rates" — no forward-projection claims.
+- No "+$5M investment would move us to #132" — no scenario/investment claims.
+- Sections actually shipped: headline, growth vs. peers, peer landscape (closest peer by rank + current dollar gap — historical fact, not a projection), portfolio signal, federal signal, footnote.
+- `GET /briefing/{inst_id}` (not `POST /briefing/generate` — there's no simulation input, it just reads whichever peer group is currently active, same as `/institutions/{inst_id}/insight`).
+- PDF generation is client-side (`jsPDF`, lazy-loaded in the frontend on click) instead of server-side `fpdf2` — keeps the API JSON-only and avoids adding a PDF dependency to every API container.
+See `docs/decisions.md` ("[Feature 4] Narrative Briefing") for full reasoning.
+
 ---
 
 ## Deferred Features (Do Not Build Yet)
@@ -450,7 +458,7 @@ The tool serves a wider audience than just VPRs. Below is the full map of person
 
 ## Build Phases
 
-### Current Status (as of 2026-07-08)
+### Current Status (as of 2026-07-12)
 
 Phases were **not** built strictly in the order below. Actual build order:
 
@@ -458,15 +466,15 @@ Phases were **not** built strictly in the order below. Actual build order:
 |---|---|---|
 | 1. Docker + Postgres | ✅ Done | |
 | 2. dbt Core | ✅ Done | 8 models, 40 tests passing |
-| 3. FastAPI | ⏸ Partial | institutions/peers/portfolio/federal/qa built; `scenarios`, `projections`, `briefing` (Features 1, 3, 4) explicitly deferred |
+| 3. FastAPI | ⏸ Partial | institutions/peers/portfolio/federal/qa/classifications built. Feature 4 (briefing) built in **reduced scope**: `GET /briefing/{inst_id}` returns a narrative-only JSON briefing (rank, CAGR vs. active peer group, portfolio signal, federal signal) with no scenario or projection claims — see `docs/decisions.md` ("[Feature 4] Narrative Briefing"). `scenarios` (Feature 1) and `projections` (Feature 3) remain explicitly deferred; both still depend on Phase 4 (DuckDB) per the original design. Feature 2 (peer movement tracker) also not yet built. |
 | 4. DuckDB | ⬜ Not started | Skipped in favor of Phase 7 — revisit before Features 1/3 (scenario/projection) can be built |
 | 5. Dagster | ⬜ Not started | Skipped in favor of Phase 7 |
 | 6. GitHub Actions CI | ⬜ Not started | Skipped in favor of Phase 7 |
-| 7. Frontend | ✅ Done | Built immediately after Phase 3, ahead of Phases 4–6. Next.js/React chosen over Reflex (see decision below). Full v1 parity + one new feature (per-institution suggested questions) |
+| 7. Frontend | ✅ Done | Built immediately after Phase 3, ahead of Phases 4–6. Next.js/React chosen over Reflex (see decision below). Full v1 parity + per-institution suggested questions, unified peer-set selection UX, historical year selector with two-year side-by-side compare, and client-side PDF briefing export (jsPDF, lazy-loaded — no server-side PDF dependency) |
 
 **Why the order changed**: after Phase 3 shipped a usable read API, the call was made to get a demoable end-to-end product (API + UI) working before investing in DuckDB/Dagster/CI, which have no user-visible payoff on their own. Phases 4–6 are not abandoned — see the revisit trigger logged in `docs/decisions.md` ("[Phase 7] Frontend stack reaffirmed").
 
-**Revisit trigger**: now that Phase 7 is live and validated, next work should return to either (a) Phases 4–6 in order, or (b) Feature 1/2/3/4 (scenarios, peer movement, projections, briefing) directly — DuckDB (Phase 4) is a prerequisite for Features 1 and 3 specifically. Decide explicitly before starting; don't let this drift again.
+**Revisit trigger**: Feature 4 (briefing) was picked back up on 2026-07-12 and built in reduced scope — narrative-only, no scenario/projection claims — precisely because Features 1 (Scenario Modeling) and 3 (Forward Projection) aren't built yet and DuckDB (Phase 4) is a prerequisite for both. Feature 2 (Peer Movement Tracker) still remains unbuilt. Next work should return to either (a) Phases 4–6 in order, or (b) Features 1/2/3 directly. Decide explicitly before starting; don't let this drift again.
 
 ---
 
@@ -560,7 +568,7 @@ dbt docs generate && dbt docs serve  # visual DAG + docs
 
 **Goal**: Every query the Streamlit app makes is now an HTTP endpoint.
 
-**Status**: `institutions`, `peers`, `portfolio`, `federal`, `qa` routers are built and verified. `scenarios`, `projections`, `briefing` (Features 1, 3, 4 below) are explicitly deferred — not forgotten. `projections`/`scenarios` also depend on Phase 4 (DuckDB) per the original design.
+**Status**: `institutions`, `peers`, `portfolio`, `federal`, `qa`, `classifications` routers are built and verified. `briefing` (Feature 4) is built in **reduced scope** — narrative-only JSON, no scenario or projection claims, `GET` instead of `POST` (no input to simulate, just reads whatever peer group is active) — see `docs/decisions.md` ("[Feature 4] Narrative Briefing"). `scenarios` (Feature 1) and `projections` (Feature 3) remain explicitly deferred — not forgotten. Both also depend on Phase 4 (DuckDB) per the original design.
 
 **Files to create**:
 - `api/Dockerfile`
@@ -614,7 +622,7 @@ curl http://localhost:8000/docs                  # Swagger UI
 | `engine.ask(question, context)` | `POST /qa/ask` |
 | (new) | `POST /scenarios/simulate` |
 | (new) | `GET /projections/{inst_id}` |
-| (new) | `POST /briefing/generate` |
+| (new) | `GET /briefing/{inst_id}` — built as `GET`, not `POST /briefing/generate` as originally sketched; narrative-only, no scenario/projection claims (see Deferred Features) |
 
 **API design rules**:
 - All endpoints return JSON. No HTML, no Streamlit widgets.

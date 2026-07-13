@@ -10,11 +10,11 @@ The MVP told VPRs where they are. This version is being built toward telling the
 |---|---|
 | 1. Docker + Postgres | Done |
 | 2. dbt Core (staging + marts + tests) | Done |
-| 3. FastAPI (institutions, peers, portfolio, federal, qa) | Partial — scenarios/projections/briefing deferred |
+| 3. FastAPI (institutions, peers, portfolio, federal, qa, classifications, briefing) | Partial — briefing built in reduced scope (narrative only); scenarios/projections still deferred |
 | 4. DuckDB analytical layer | Not started |
 | 5. Dagster orchestration | Not started |
 | 6. GitHub Actions CI | Not started |
-| 7. Frontend (Next.js) | Done — full MVP feature parity |
+| 7. Frontend (Next.js) | Done — full MVP feature parity + peer-set UX unification, historical year selector, two-year compare, PDF briefing export |
 
 See [`CLAUDE.md`](./CLAUDE.md) for the full build plan and [`docs/decisions.md`](./docs/decisions.md) for the architecture decision log.
 
@@ -22,8 +22,8 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full build plan and [`docs/decisions.md`]
 
 - **Postgres** — raw + staging tables (OLTP)
 - **dbt** — staging/mart transformation layer, with data invariant tests
-- **FastAPI** — HTTP API serving mart data, KNN peer matching, and LLM-backed Q&A
-- **Next.js / React** — frontend
+- **FastAPI** — HTTP API serving mart data, KNN peer matching, LLM-backed Q&A, and narrative briefing generation
+- **Next.js / React** — frontend, with client-side PDF export (jsPDF, lazy-loaded)
 - **Docker Compose** — local orchestration of all services
 
 ## Getting Started
