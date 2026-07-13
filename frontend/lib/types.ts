@@ -62,6 +62,7 @@ export interface StateRanking {
 export interface PeersResponse {
   inst_id: string;
   peer_inst_ids: string[];
+  candidate_pool_size?: CandidatePoolSize;
 }
 
 export interface GapRow {
@@ -198,4 +199,82 @@ export interface SuggestedQuestionGroup {
 
 export interface SuggestedQuestionsResponse {
   groups: SuggestedQuestionGroup[];
+}
+
+export interface ClassificationData {
+  inst_id: string;
+  unitid: string | null;
+  carnegie_class: string;
+  control: string;
+  has_med_school: boolean;
+  is_aau: boolean;
+  is_aplu: boolean;
+  is_hbcu: boolean;
+  is_hsi: boolean;
+  is_epscor: boolean;
+}
+
+export interface ClassificationOptions {
+  carnegie_classes: string[];
+  controls: string[];
+  counts: {
+    total: number;
+    med_school: number;
+    aau: number;
+    aplu: number;
+    hbcu: number;
+    hsi: number;
+    epscor: number;
+  };
+}
+
+export interface PeerFilters {
+  carnegie?: string[];
+  control?: string;
+  exclude_med?: boolean;
+  aau_only?: boolean;
+  aplu_only?: boolean;
+  hbcu_only?: boolean;
+  hsi_only?: boolean;
+  epscor_only?: boolean;
+}
+
+export interface CandidatePoolSize {
+  total: number;
+  filtered: number;
+}
+
+export interface BriefingSection {
+  title: string;
+  body: string;
+}
+
+export interface BriefingKeyMetric {
+  label: string;
+  value: string;
+}
+
+export interface BriefingPeerRow {
+  name: string;
+  rank: number;
+  total_rd: number;
+  is_target: boolean;
+}
+
+export interface BriefingRankPoint {
+  year: number;
+  national_rank: number;
+  total_rd: number;
+}
+
+export interface BriefingResponse {
+  institution_name: string;
+  state: string;
+  year: number;
+  headline: string;
+  sections: BriefingSection[];
+  footnote: string;
+  key_metrics: BriefingKeyMetric[];
+  peer_table: BriefingPeerRow[];
+  rank_trend: BriefingRankPoint[];
 }

@@ -19,6 +19,10 @@ import type {
   FieldPeerComparisonResponse,
   AgencyPeerComparisonResponse,
   SuggestedQuestionsResponse,
+  ClassificationData,
+  ClassificationOptions,
+  PeerFilters,
+  BriefingResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -68,14 +72,33 @@ export const getStrategicInsight = (
   return getJson<StrategicInsight>(`/institutions/${instId}/insight?${q}`);
 };
 
-// --- peers ---
-export const getPeers = (instId: string, n?: number) =>
-  getJson<PeersResponse>(`/peers/${instId}${n ? `?n=${n}` : ""}`);
+// --- filter helpers ---
+function applyPeerFilters(q: URLSearchParams, filters?: PeerFilters) {
+  if (!filters) return;
+  if (filters.carnegie?.length) q.set("carnegie", filters.carnegie.join(","));
+  if (filters.control) q.set("control", filters.control);
+  if (filters.exclude_med) q.set("exclude_med", "true");
+  if (filters.aau_only) q.set("aau_only", "true");
+  if (filters.aplu_only) q.set("aplu_only", "true");
+  if (filters.hbcu_only) q.set("hbcu_only", "true");
+  if (filters.hsi_only) q.set("hsi_only", "true");
+  if (filters.epscor_only) q.set("epscor_only", "true");
+}
 
-export const getGap = (instId: string, opts: { n?: number; peerIds?: string[] } = {}) => {
+// --- peers ---
+export const getPeers = (instId: string, opts: { n?: number; filters?: PeerFilters } = {}) => {
+  const q = new URLSearchParams();
+  if (opts.n) q.set("n", String(opts.n));
+  applyPeerFilters(q, opts.filters);
+  const qs = q.toString();
+  return getJson<PeersResponse>(`/peers/${instId}${qs ? `?${qs}` : ""}`);
+};
+
+export const getGap = (instId: string, opts: { n?: number; peerIds?: string[]; filters?: PeerFilters } = {}) => {
   const q = new URLSearchParams();
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
+  applyPeerFilters(q, opts.filters);
   const qs = q.toString();
   return getJson<GapResponse>(`/peers/${instId}/gap${qs ? `?${qs}` : ""}`);
 };
@@ -84,13 +107,21 @@ export const getPeerTrend = (
   instId: string,
   start = 2019,
   end = 2024,
-  opts: { n?: number; peerIds?: string[] } = {}
+  opts: { n?: number; peerIds?: string[]; filters?: PeerFilters } = {}
 ) => {
   const q = new URLSearchParams({ start: String(start), end: String(end) });
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
+  applyPeerFilters(q, opts.filters);
   return getJson<PeerTrendResponse>(`/peers/${instId}/trend?${q}`);
 };
+
+// --- classifications ---
+export const getClassification = (instId: string) =>
+  getJson<ClassificationData>(`/classifications/${instId}`);
+
+export const getClassificationOptions = () =>
+  getJson<ClassificationOptions>(`/classifications/options`);
 
 // --- portfolio ---
 export const getFieldPortfolio = (instId: string, year = 2024) =>
@@ -105,11 +136,12 @@ export const getFieldMomentum = (instId: string, start = 2019, end = 2024) =>
 export const getFieldPeerComparison = (
   instId: string,
   year = 2024,
-  opts: { n?: number; peerIds?: string[] } = {}
+  opts: { n?: number; peerIds?: string[]; filters?: PeerFilters } = {}
 ) => {
   const q = new URLSearchParams({ year: String(year) });
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
+  applyPeerFilters(q, opts.filters);
   return getJson<FieldPeerComparisonResponse>(`/portfolio/${instId}/peer-comparison?${q}`);
 };
 
@@ -126,11 +158,12 @@ export const getConcentration = (instId: string, year = 2024) =>
 export const getAgencyPeerComparison = (
   instId: string,
   year = 2024,
-  opts: { n?: number; peerIds?: string[] } = {}
+  opts: { n?: number; peerIds?: string[]; filters?: PeerFilters } = {}
 ) => {
   const q = new URLSearchParams({ year: String(year) });
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
+  applyPeerFilters(q, opts.filters);
   return getJson<AgencyPeerComparisonResponse>(`/federal/${instId}/peer-comparison?${q}`);
 };
 
@@ -144,6 +177,19 @@ export const getSuggestedQuestions = (
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
   return getJson<SuggestedQuestionsResponse>(`/institutions/${instId}/suggested-questions?${q}`);
+};
+
+// --- briefing ---
+export const getBriefing = (
+  instId: string,
+  start = 2019,
+  end = 2024,
+  opts: { n?: number; peerIds?: string[] } = {}
+) => {
+  const q = new URLSearchParams({ start: String(start), end: String(end) });
+  if (opts.n) q.set("n", String(opts.n));
+  if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
+  return getJson<BriefingResponse>(`/briefing/${instId}?${q}`);
 };
 
 // --- qa ---
