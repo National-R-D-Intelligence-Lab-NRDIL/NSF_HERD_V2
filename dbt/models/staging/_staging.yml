@@ -11,6 +11,8 @@ sources:
         description: R&D spending per institution per year broken down by field (parent + sub-fields)
       - name: raw_agency_funding
         description: Federal R&D spending per institution per year broken down by agency
+      - name: raw_institution_classifications
+        description: Institution classification metadata — Carnegie class, control, membership flags
 
 models:
   - name: stg_institutions
@@ -83,5 +85,47 @@ models:
         tests:
           - not_null
       - name: amount
+        tests:
+          - not_null
+
+  - name: stg_institution_classifications
+    description: >
+      Cleaned institution classification data. One row per inst_id.
+      Carnegie class, public/private control, medical school flag, and
+      membership in AAU, APLU, HBCU, HSI, EPSCoR.
+    columns:
+      - name: inst_id
+        description: NSF institution identifier
+        tests:
+          - not_null
+          - unique
+      - name: carnegie_class
+        description: "Carnegie classification: R1, R2, D/PU, Special Focus Medical, Unknown"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['R1', 'R2', 'D/PU', 'Special Focus Medical', 'Unknown']
+      - name: control
+        description: "Public or Private"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Public', 'Private', 'Unknown']
+      - name: has_med_school
+        tests:
+          - not_null
+      - name: is_aau
+        tests:
+          - not_null
+      - name: is_aplu
+        tests:
+          - not_null
+      - name: is_hbcu
+        tests:
+          - not_null
+      - name: is_hsi
+        tests:
+          - not_null
+      - name: is_epscor
         tests:
           - not_null

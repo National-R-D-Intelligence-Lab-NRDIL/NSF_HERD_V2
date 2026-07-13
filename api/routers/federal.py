@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from db import get_pool, rows_to_dicts
+from services.benchmarker import PeerFilters
 
 router = APIRouter(prefix="/federal", tags=["federal"])
 
@@ -98,13 +99,22 @@ async def get_agency_concentration(inst_id: str, year: int = 2024):
 @router.get("/{inst_id}/peer-comparison")
 async def get_agency_peer_comparison(
     inst_id: str, request: Request, year: int = 2024, n: int | None = None, peer_ids: str | None = None,
+    carnegie: str | None = None, control: str | None = None, exclude_med: bool = False,
+    aau_only: bool = False, aplu_only: bool = False, hbcu_only: bool = False,
+    hsi_only: bool = False, epscor_only: bool = False,
 ):
     """How the institution's federal agency mix compares to its peer group's
     average — ported from v1's get_agency_peer_comparison()."""
     bench = request.app.state.benchmarker
     custom = _parse_peer_ids(peer_ids)
+    carnegie_list = [c.strip() for c in carnegie.split(",") if c.strip()] if carnegie else None
+    filters = PeerFilters(
+        carnegie=carnegie_list, control=control, exclude_med=exclude_med,
+        aau_only=aau_only, aplu_only=aplu_only, hbcu_only=hbcu_only,
+        hsi_only=hsi_only, epscor_only=epscor_only,
+    )
     try:
-        peers = custom if custom else bench.get_peer_inst_ids(inst_id, n=n)
+        peers = custom if custom else bench.get_peer_inst_ids(inst_id, n=n, filters=filters)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
     if not peers:

@@ -38,3 +38,17 @@ CREATE TABLE IF NOT EXISTS raw_agency_funding (
     amount      BIGINT,
     PRIMARY KEY (inst_id, year, agency_code)
 );
+
+CREATE TABLE IF NOT EXISTS raw_institution_classifications (
+    inst_id         TEXT NOT NULL PRIMARY KEY,
+    unitid          TEXT,
+    carnegie_class  TEXT,
+    control         TEXT,
+    has_med_school  BOOLEAN,
+    is_aau          BOOLEAN DEFAULT FALSE,
+    is_aplu         BOOLEAN DEFAULT FALSE,
+    is_hbcu         BOOLEAN DEFAULT FALSE,
+    is_hsi          BOOLEAN DEFAULT FALSE,
+    is_epscor       BOOLEAN DEFAULT FALSE,
+    updated_at      TIMESTAMP DEFAULT NOW()
+);

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from db import get_pool, rows_to_dicts
+from services.benchmarker import PeerFilters
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -83,14 +84,23 @@ async def get_field_momentum(inst_id: str, start: int = 2019, end: int = 2024):
 @router.get("/{inst_id}/peer-comparison")
 async def get_field_peer_comparison(
     inst_id: str, request: Request, year: int = 2024, n: int | None = None, peer_ids: str | None = None,
+    carnegie: str | None = None, control: str | None = None, exclude_med: bool = False,
+    aau_only: bool = False, aplu_only: bool = False, hbcu_only: bool = False,
+    hsi_only: bool = False, epscor_only: bool = False,
 ):
     """How the institution's field mix (portfolio share %) compares to its peer
     group's average — ported from v1's get_field_peer_comparison(). Peer group is
     either the explicit custom peer_ids or the fitted KNN benchmarker's peers."""
     bench = request.app.state.benchmarker
     custom = _parse_peer_ids(peer_ids)
+    carnegie_list = [c.strip() for c in carnegie.split(",") if c.strip()] if carnegie else None
+    filters = PeerFilters(
+        carnegie=carnegie_list, control=control, exclude_med=exclude_med,
+        aau_only=aau_only, aplu_only=aplu_only, hbcu_only=hbcu_only,
+        hsi_only=hsi_only, epscor_only=epscor_only,
+    )
     try:
-        peers = custom if custom else bench.get_peer_inst_ids(inst_id, n=n)
+        peers = custom if custom else bench.get_peer_inst_ids(inst_id, n=n, filters=filters)
     except KeyError as e:
         raise HTTPException(status_code=404, detail=str(e))
     if not peers:

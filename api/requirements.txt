@@ -3,6 +3,7 @@ uvicorn[standard]==0.30.6
 asyncpg==0.29.0
 pydantic-settings==2.5.2
 scikit-learn==1.5.2
+scipy==1.14.1
 pandas==2.2.2
 numpy==2.0.2
 google-genai==0.3.0

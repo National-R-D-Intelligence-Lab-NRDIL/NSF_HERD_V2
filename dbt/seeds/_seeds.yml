@@ -1,0 +1,33 @@
+version: 2
+
+seeds:
+  - name: seed_aau_members
+    description: AAU member institutions (71 members). Manually maintained.
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+      - name: name
+        tests:
+          - not_null
+
+  - name: seed_aplu_members
+    description: APLU member institutions (~226 members). Manually maintained.
+    columns:
+      - name: inst_id
+        tests:
+          - not_null
+      - name: name
+        tests:
+          - not_null
+
+  - name: seed_epscor_states
+    description: States eligible for EPSCoR funding (28 states/territories).
+    columns:
+      - name: state
+        tests:
+          - not_null
+          - unique
+      - name: is_epscor
+        tests:
+          - not_null
