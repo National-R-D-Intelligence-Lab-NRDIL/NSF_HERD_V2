@@ -13,19 +13,24 @@ import {
 import type {
   InstitutionDetail, RankPoint, AnchorResponse, FundingBreakdown,
   StateRanking, GapResponse, PeerTrendResponse, TrendStats, StrategicInsight,
+  PeerFilters,
 } from "@/lib/types";
 import { formatDollars, formatDollarsFull, formatPct, formatRank } from "@/lib/format";
 import KpiCard from "./KpiCard";
 import Card from "./Card";
+import YearCompare from "./YearCompare";
 
 interface Props {
   instId: string;
   startYear: number;
   endYear: number;
   customPeerIds: string[];
+  peerFilters?: PeerFilters;
 }
 
 const N_PEERS = 10;
+const MIN_YEAR = 2010;
+const MAX_YEAR = 2024;
 const COLORS = ["#2563eb", "#7c3aed", "#db2777", "#ea580c", "#16a34a", "#0891b2", "#ca8a04", "#4f46e5", "#0d9488", "#be123c"];
 const METRIC_LABELS: Record<string, string> = {
   total_rd: "Total R&D", federal: "Federal", state_local: "State/Local",
@@ -37,7 +42,7 @@ const SOURCE_LABELS: Record<string, string> = {
   business: "Business", nonprofit: "Nonprofit", other_sources: "Other",
 };
 
-export default function SnapshotTab({ instId, startYear, endYear, customPeerIds }: Props) {
+export default function SnapshotTab({ instId, startYear, endYear, customPeerIds, peerFilters }: Props) {
   const customPeerMode = customPeerIds.length > 0;
 
   const [detail, setDetail] = useState<InstitutionDetail | null>(null);
@@ -47,14 +52,16 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
   const [stateRank, setStateRank] = useState<StateRanking | null>(null);
   const [gap, setGap] = useState<GapResponse | null>(null);
   const [peerTrend, setPeerTrend] = useState<PeerTrendResponse | null>(null);
-  const [landingStats, setLandingStats] = useState<TrendStats | null>(null);
   const [insight, setInsight] = useState<StrategicInsight | null>(null);
   const [growthView, setGrowthView] = useState<"summary" | "detail">("summary");
+  const [showCompare, setShowCompare] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setError(null);
-    const peerOpts = customPeerMode ? { peerIds: customPeerIds } : { n: N_PEERS };
+    const peerOpts = customPeerMode
+      ? { peerIds: customPeerIds }
+      : { n: N_PEERS, filters: peerFilters };
     Promise.all([
       getInstitution(instId, endYear),
       getRankTrend(instId, startYear, endYear),
@@ -63,10 +70,9 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
       getStateRanking(instId, endYear),
       getGap(instId, peerOpts),
       getPeerTrend(instId, startYear, endYear, peerOpts),
-      getPeerTrend(instId, startYear, endYear, { n: N_PEERS }), // landing briefing: always KNN, independent of custom peers
       getStrategicInsight(instId, startYear, endYear, peerOpts).catch(() => null),
     ])
-      .then(([d, rt, a, f, sr, g, pt, landingPt, ins]) => {
+      .then(([d, rt, a, f, sr, g, pt, ins]) => {
         setDetail(d);
         setRankTrend(rt);
         setAnchor(a);
@@ -74,11 +80,10 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
         setStateRank(sr);
         setGap(g);
         setPeerTrend(pt);
-        setLandingStats(landingPt.stats);
         setInsight(ins);
       })
       .catch((e) => setError(String(e)));
-  }, [instId, startYear, endYear, customPeerMode, customPeerIds]);
+  }, [instId, startYear, endYear, customPeerMode, customPeerIds, peerFilters]);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!detail) return <p className="text-sm text-gray-500">Loading…</p>;
@@ -93,7 +98,8 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
     rdChange: current.total_rd - first.total_rd,
   } : null;
 
-  const callout = generateLandingCallout(execMetrics, landingStats, insight, nYears);
+  const activePeerLabel = peerGroupLabel(customPeerMode, customPeerIds.length, peerTrend, N_PEERS);
+  const callout = generateLandingCallout(execMetrics, peerTrend?.stats ?? null, insight, nYears, customPeerMode, activePeerLabel);
 
   return (
     <div className="space-y-8">
@@ -103,7 +109,7 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
         </div>
       )}
 
-      {/* Landing briefing: 3 KPIs, always based on the 10 AI-matched benchmark peers */}
+      {/* Landing briefing: 3 KPIs. CAGR comparison follows the currently active peer set (custom, filtered, or default benchmark). */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KpiCard
           label={`National Rank — FY${endYear}`}
@@ -119,9 +125,9 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
         />
         <KpiCard
           label={`${nYears}-Year CAGR`}
-          value={landingStats ? formatPct(landingStats.target_cagr) : "—"}
-          sublabel={landingStats ? `${(landingStats.target_cagr - landingStats.peer_avg_cagr) >= 0 ? "+" : ""}${(landingStats.target_cagr - landingStats.peer_avg_cagr).toFixed(1)}pp vs ${N_PEERS} Benchmark Peers` : undefined}
-          trend={landingStats && landingStats.target_cagr >= landingStats.peer_avg_cagr ? "up" : "down"}
+          value={peerTrend ? formatPct(peerTrend.stats.target_cagr) : "—"}
+          sublabel={peerTrend ? `${(peerTrend.stats.target_cagr - peerTrend.stats.peer_avg_cagr) >= 0 ? "+" : ""}${(peerTrend.stats.target_cagr - peerTrend.stats.peer_avg_cagr).toFixed(1)}pp vs ${activePeerLabel}` : undefined}
+          trend={peerTrend && peerTrend.stats.target_cagr >= peerTrend.stats.peer_avg_cagr ? "up" : "down"}
         />
       </div>
 
@@ -143,10 +149,10 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
             )}
           </div>
         ) : null}
-        {landingStats && (
+        {peerTrend && (
           <p className="mb-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
             <span className="font-semibold">Peer Position:</span>{" "}
-            {peerPositionLabel(peerTrend?.stats ?? landingStats, customPeerMode, N_PEERS)}
+            {peerPositionLabel(peerTrend.stats, customPeerMode, N_PEERS)}
           </p>
         )}
         {insight ? (
@@ -175,6 +181,22 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds 
           </BarChart>
         </ResponsiveContainer>
       </Card>
+
+      {/* Compare Two Years */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowCompare((v) => !v)}
+          className="text-sm font-medium text-blue-700 hover:text-blue-800"
+        >
+          {showCompare ? "Hide year comparison ▲" : "Compare two years ▼"}
+        </button>
+        {showCompare && (
+          <div className="mt-3">
+            <YearCompare instId={instId} minYear={MIN_YEAR} maxYear={MAX_YEAR} />
+          </div>
+        )}
+      </div>
 
       {/* Where You Sit Nationally (anchor / competitive band) */}
       {anchor && (
@@ -325,29 +347,43 @@ function peerPositionLabel(stats: TrendStats, customPeerMode: boolean, nPeers: n
   return `Growth aligned with ${peerLabel}`;
 }
 
+function peerGroupLabel(customPeerMode: boolean, customPeerCount: number, peerTrend: PeerTrendResponse | null, nPeers: number): string {
+  if (customPeerMode) return `${customPeerCount} custom peer${customPeerCount === 1 ? "" : "s"}`;
+  const n = peerTrend ? peerTrend.stats.total_in_group - 1 : nPeers;
+  return `${n} Benchmark Peers`;
+}
+
 function generateLandingCallout(
   metrics: { currentRank: number; rankChange: number } | null,
-  benchStats: TrendStats | null,
+  peerStats: TrendStats | null,
   insight: StrategicInsight | null,
-  nYears: number
+  nYears: number,
+  customPeerMode: boolean,
+  peerLabel: string
 ): string | null {
   const signals: [number, string][] = [];
 
-  if (benchStats?.growth_rank && benchStats.total_in_group) {
-    const rank = benchStats.growth_rank;
-    const total = benchStats.total_in_group;
-    const cagr = benchStats.target_cagr;
-    const pavg = benchStats.peer_avg_cagr;
+  if (peerStats) {
+    const cagr = peerStats.target_cagr;
+    const pavg = peerStats.peer_avg_cagr;
     const diff = Math.round((cagr - pavg) * 10) / 10;
 
-    if (rank <= 3) {
-      signals.push([3, `You rank #${rank} of ${total} among your ${N_PEERS} Benchmark Peers in ${nYears}-year R&D growth (${cagr}% CAGR). See who you're outpacing in Peer Analysis below.`]);
-    } else if (rank > total - 3) {
-      signals.push([3, `Your ${nYears}-year growth (${cagr}% CAGR) ranks #${rank} of ${total} Benchmark Peers — peer average is ${pavg}%. Peer Analysis below shows which funding sources peers are scaling faster.`]);
+    if (!customPeerMode && peerStats.growth_rank && peerStats.total_in_group) {
+      const rank = peerStats.growth_rank;
+      const total = peerStats.total_in_group;
+      if (rank <= 3) {
+        signals.push([3, `You rank #${rank} of ${total} among your ${peerLabel} in ${nYears}-year R&D growth (${cagr}% CAGR). See who you're outpacing in Peer Analysis below.`]);
+      } else if (rank > total - 3) {
+        signals.push([3, `Your ${nYears}-year growth (${cagr}% CAGR) ranks #${rank} of ${total} ${peerLabel} — peer average is ${pavg}%. Peer Analysis below shows which funding sources peers are scaling faster.`]);
+      } else if (diff >= 2) {
+        signals.push([2, `Growing +${diff}pp faster than your ${peerLabel} (${cagr}% vs ${pavg}% CAGR over ${nYears} years). You rank #${rank} of ${total} in your peer group.`]);
+      } else if (diff <= -2) {
+        signals.push([2, `Growing ${Math.abs(diff)}pp slower than your ${peerLabel} (${cagr}% vs ${pavg}% CAGR over ${nYears} years). You rank #${rank} of ${total} in your peer group.`]);
+      }
     } else if (diff >= 2) {
-      signals.push([2, `Growing ${diff > 0 ? "+" : ""}${diff}pp faster than your ${N_PEERS} Benchmark Peers (${cagr}% vs ${pavg}% CAGR over ${nYears} years). You rank #${rank} of ${total} in your peer group.`]);
+      signals.push([2, `Growing +${diff}pp faster than your ${peerLabel} (${cagr}% vs ${pavg}% CAGR over ${nYears} years).`]);
     } else if (diff <= -2) {
-      signals.push([2, `Growing ${Math.abs(diff)}pp slower than your ${N_PEERS} Benchmark Peers (${cagr}% vs ${pavg}% CAGR over ${nYears} years). You rank #${rank} of ${total} in your peer group.`]);
+      signals.push([2, `Growing ${Math.abs(diff)}pp slower than your ${peerLabel} (${cagr}% vs ${pavg}% CAGR over ${nYears} years).`]);
     }
   }
 

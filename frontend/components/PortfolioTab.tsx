@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import type {
   FieldPortfolioRow, FieldDrilldownRow, FieldMomentumRow, FieldPeerComparisonRow,
+  PeerFilters,
 } from "@/lib/types";
 import { formatDollars, formatPct } from "@/lib/format";
 import Card from "./Card";
@@ -20,9 +21,11 @@ interface Props {
   startYear: number;
   endYear: number;
   customPeerIds: string[];
+  peerFilters?: PeerFilters;
 }
 
 const STANDALONE_PARENTS = new Set(["cs", "math", "psychology", "other_sciences"]);
+
 const FIELD_SHORT_LABELS: Record<string, string> = {
   cs: "Computer Science",
   engineering: "Engineering",
@@ -37,7 +40,7 @@ const FIELD_SHORT_LABELS: Record<string, string> = {
 };
 const N_PEERS = 10;
 
-export default function PortfolioTab({ instId, startYear, endYear, customPeerIds }: Props) {
+export default function PortfolioTab({ instId, startYear, endYear, customPeerIds, peerFilters }: Props) {
   const customPeerMode = customPeerIds.length > 0;
   const [portfolio, setPortfolio] = useState<FieldPortfolioRow[]>([]);
   const [momentum, setMomentum] = useState<FieldMomentumRow[]>([]);
@@ -47,7 +50,7 @@ export default function PortfolioTab({ instId, startYear, endYear, customPeerIds
 
   useEffect(() => {
     setError(null);
-    const peerOpts = customPeerMode ? { peerIds: customPeerIds } : { n: N_PEERS };
+    const peerOpts = customPeerMode ? { peerIds: customPeerIds } : { n: N_PEERS, filters: peerFilters };
     Promise.all([
       getFieldPortfolio(instId, endYear),
       getFieldMomentum(instId, startYear, endYear),
@@ -60,7 +63,7 @@ export default function PortfolioTab({ instId, startYear, endYear, customPeerIds
         setDrilldowns({});
       })
       .catch((e) => setError(String(e)));
-  }, [instId, startYear, endYear, customPeerMode, customPeerIds]);
+  }, [instId, startYear, endYear, customPeerMode, customPeerIds, peerFilters]);
 
   const loadDrilldown = (fieldCode: string) => {
     if (drilldowns[fieldCode]) return;
@@ -253,6 +256,10 @@ export default function PortfolioTab({ instId, startYear, endYear, customPeerIds
               How your field mix compares to your {N_PEERS} nearest peers. Positive = you invest a larger share than peers.
             </p>
           )}
+          <p className="mb-3 text-xs text-slate-400">
+            Peers are matched on overall institutional funding profile, not specifically on field mix — a strong
+            overall match may still look like an outlier in a given field.
+          </p>
           <ResponsiveContainer width="100%" height={Math.max(280, comparison.length * 36)}>
             <BarChart
               data={[...comparison].map((c) => ({ ...c, label: FIELD_SHORT_LABELS[c.field_code] ?? c.field_name })).sort((a, b) => a.difference - b.difference)}

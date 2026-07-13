@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import type {
   AgencyRow, AgencyTrendRow, ConcentrationResponse, AgencyPeerComparisonRow,
+  PeerFilters,
 } from "@/lib/types";
 import { formatDollars, formatDollarsFull, formatPct } from "@/lib/format";
 import KpiCard from "./KpiCard";
@@ -20,6 +21,7 @@ interface Props {
   startYear: number;
   endYear: number;
   customPeerIds: string[];
+  peerFilters?: PeerFilters;
 }
 
 const DONUT_COLORS = ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD", "#BFDBFE", "#DBEAFE", "#EFF6FF"];
@@ -29,7 +31,7 @@ const AGENCY_COLORS: Record<string, string> = {
 };
 const N_PEERS = 10;
 
-export default function FederalTab({ instId, startYear, endYear, customPeerIds }: Props) {
+export default function FederalTab({ instId, startYear, endYear, customPeerIds, peerFilters }: Props) {
   const customPeerMode = customPeerIds.length > 0;
   const [agencies, setAgencies] = useState<AgencyRow[]>([]);
   const [concentration, setConcentration] = useState<ConcentrationResponse | null>(null);
@@ -39,7 +41,7 @@ export default function FederalTab({ instId, startYear, endYear, customPeerIds }
 
   useEffect(() => {
     setError(null);
-    const peerOpts = customPeerMode ? { peerIds: customPeerIds } : { n: N_PEERS };
+    const peerOpts = customPeerMode ? { peerIds: customPeerIds } : { n: N_PEERS, filters: peerFilters };
     Promise.all([
       getAgencyBreakdown(instId, endYear),
       getConcentration(instId, endYear),
@@ -53,7 +55,7 @@ export default function FederalTab({ instId, startYear, endYear, customPeerIds }
         setComparison(cmp.comparison);
       })
       .catch((e) => setError(String(e)));
-  }, [instId, startYear, endYear, customPeerMode, customPeerIds]);
+  }, [instId, startYear, endYear, customPeerMode, customPeerIds, peerFilters]);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!agencies.length) return <p className="text-sm text-gray-500">Loading…</p>;
@@ -210,6 +212,10 @@ export default function FederalTab({ instId, startYear, endYear, customPeerIds }
               How your federal agency mix compares to your {N_PEERS} nearest peers. Positive = you rely more on this agency than peers do.
             </p>
           )}
+          <p className="mb-3 text-xs text-slate-400">
+            Peers are matched on overall institutional funding profile, not specifically on agency mix — a strong
+            overall match may still look like an outlier for a given agency.
+          </p>
           <ResponsiveContainer width="100%" height={Math.max(240, comparison.length * 40)}>
             <BarChart
               data={[...comparison].sort((a, b) => a.difference - b.difference)}
