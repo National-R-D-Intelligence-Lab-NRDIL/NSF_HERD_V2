@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import InstitutionPicker from "@/components/InstitutionPicker";
 import CustomPeerSelector from "@/components/CustomPeerSelector";
 import PeerFilterPanel from "@/components/PeerFilterPanel";
@@ -10,6 +11,7 @@ import PortfolioTab from "@/components/PortfolioTab";
 import FederalTab from "@/components/FederalTab";
 import QaTab from "@/components/QaTab";
 import { getPeers } from "@/lib/api";
+import { supabase, isAuthConfigured } from "@/lib/supabase";
 import type { InstitutionListItem, PeerFilters, CandidatePoolSize } from "@/lib/types";
 
 const MAX_YEAR = 2024;
@@ -20,6 +22,7 @@ const TABS = ["Institution Snapshot", "Research Portfolio", "Federal Landscape",
 type Tab = (typeof TABS)[number];
 
 export default function Home() {
+  const router = useRouter();
   const [selected, setSelected] = useState<InstitutionListItem | null>(null);
   const [viewYear, setViewYear] = useState(MAX_YEAR);
   const [timeWindow, setTimeWindow] = useState<5 | 10>(5);
@@ -31,6 +34,14 @@ export default function Home() {
   const customPeerMode = customPeerIds.length > 0;
   const endYear = viewYear;
   const startYear = Math.max(MIN_YEAR, viewYear - timeWindow);
+
+  // Redirect to login if auth is configured and user has no session.
+  useEffect(() => {
+    if (!isAuthConfigured() || !supabase) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) router.push("/login");
+    });
+  }, [router]);
 
   useEffect(() => {
     if (!selected) {
@@ -53,19 +64,32 @@ export default function Home() {
     <div className="min-h-full">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-1.5 rounded-full bg-blue-600" />
-            <div>
-              <h1 className="text-lg font-bold leading-tight text-slate-900">NSF HERD Research Intelligence</h1>
-              <p className="text-xs text-slate-500">
-                University R&amp;D funding intelligence, FY{MIN_YEAR}–FY{MAX_YEAR}
-                {" · "}
-                {viewYear === MAX_YEAR
-                  ? `Viewing the latest available year (FY${MAX_YEAR}).`
-                  : `Viewing FY${viewYear} — the latest available year is FY${MAX_YEAR}.`}
-                {" "}NSF publishes HERD survey data on roughly an 18-month lag.
-              </p>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-1.5 rounded-full bg-blue-600" />
+              <div>
+                <h1 className="text-lg font-bold leading-tight text-slate-900">NSF HERD Research Intelligence</h1>
+                <p className="text-xs text-slate-500">
+                  University R&amp;D funding intelligence, FY{MIN_YEAR}–FY{MAX_YEAR}
+                  {" · "}
+                  {viewYear === MAX_YEAR
+                    ? `Viewing the latest available year (FY${MAX_YEAR}).`
+                    : `Viewing FY${viewYear} — the latest available year is FY${MAX_YEAR}.`}
+                  {" "}NSF publishes HERD survey data on roughly an 18-month lag.
+                </p>
+              </div>
             </div>
+            {isAuthConfigured() && supabase && (
+              <button
+                onClick={async () => {
+                  await supabase!.auth.signOut();
+                  router.push("/login");
+                }}
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:border-slate-300 hover:text-slate-700"
+              >
+                Sign out
+              </button>
+            )}
           </div>
         </div>
       </header>
