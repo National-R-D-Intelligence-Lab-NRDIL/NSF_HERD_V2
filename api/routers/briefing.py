@@ -6,8 +6,9 @@ jsPDF, keeping this endpoint lightweight (no fpdf2 or other heavy PDF
 dependency on the server).
 """
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from auth import get_current_user
 from db import get_pool
 from services.narrative import generate_briefing
 
@@ -22,6 +23,7 @@ async def get_briefing(
     end: int = 2024,
     n: int | None = None,
     peer_ids: str | None = None,
+    user: dict = Depends(get_current_user),
 ):
     """Generate a one-page research positioning briefing. Uses whichever
     peer group (KNN or custom) is currently active -- same principle as

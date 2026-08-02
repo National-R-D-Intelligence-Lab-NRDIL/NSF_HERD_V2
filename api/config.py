@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     supabase_url: str = ""
     supabase_anon_key: str = ""
+    supabase_jwt_secret: str = ""
 
     n_peers_default: int = 20
 

@@ -8,12 +8,12 @@ import {
 } from "recharts";
 import {
   getInstitution, getRankTrend, getAnchorView, getFundingBreakdown,
-  getStateRanking, getGap, getPeerTrend, getStrategicInsight,
+  getStateRanking, getGap, getPeerTrend, getStrategicInsight, getPeerMovement,
 } from "@/lib/api";
 import type {
   InstitutionDetail, RankPoint, AnchorResponse, FundingBreakdown,
   StateRanking, GapResponse, PeerTrendResponse, TrendStats, StrategicInsight,
-  PeerFilters,
+  PeerFilters, PeerMovementResponse,
 } from "@/lib/types";
 import { formatDollars, formatDollarsFull, formatPct, formatRank } from "@/lib/format";
 import KpiCard from "./KpiCard";
@@ -52,6 +52,7 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds,
   const [stateRank, setStateRank] = useState<StateRanking | null>(null);
   const [gap, setGap] = useState<GapResponse | null>(null);
   const [peerTrend, setPeerTrend] = useState<PeerTrendResponse | null>(null);
+  const [movement, setMovement] = useState<PeerMovementResponse | null>(null);
   const [insight, setInsight] = useState<StrategicInsight | null>(null);
   const [growthView, setGrowthView] = useState<"summary" | "detail">("summary");
   const [showCompare, setShowCompare] = useState(false);
@@ -70,9 +71,10 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds,
       getStateRanking(instId, endYear),
       getGap(instId, peerOpts),
       getPeerTrend(instId, startYear, endYear, peerOpts),
+      getPeerMovement(instId, startYear, endYear, peerOpts),
       getStrategicInsight(instId, startYear, endYear, peerOpts).catch(() => null),
     ])
-      .then(([d, rt, a, f, sr, g, pt, ins]) => {
+      .then(([d, rt, a, f, sr, g, pt, mv, ins]) => {
         setDetail(d);
         setRankTrend(rt);
         setAnchor(a);
@@ -80,6 +82,7 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds,
         setStateRank(sr);
         setGap(g);
         setPeerTrend(pt);
+        setMovement(mv);
         setInsight(ins);
       })
       .catch((e) => setError(String(e)));
@@ -249,6 +252,7 @@ export default function SnapshotTab({ instId, startYear, endYear, customPeerIds,
           <PeerAnalysisSubTabs
             gap={gap}
             peerTrend={peerTrend}
+            movement={movement}
             growthView={growthView}
             setGrowthView={setGrowthView}
             customPeerMode={customPeerMode}
@@ -405,16 +409,17 @@ function generateLandingCallout(
 }
 
 function PeerAnalysisSubTabs({
-  gap, peerTrend, growthView, setGrowthView, customPeerMode, institutionName,
+  gap, peerTrend, movement, growthView, setGrowthView, customPeerMode, institutionName,
 }: {
   gap: GapResponse;
   peerTrend: PeerTrendResponse | null;
+  movement: PeerMovementResponse | null;
   growthView: "summary" | "detail";
   setGrowthView: (v: "summary" | "detail") => void;
   customPeerMode: boolean;
   institutionName: string;
 }) {
-  const [subTab, setSubTab] = useState<"profile" | "growth">("profile");
+  const [subTab, setSubTab] = useState<"profile" | "growth" | "movement">("profile");
 
   const gapData = gap.gaps.map((g) => ({ ...g, label: METRIC_LABELS[g.metric] ?? g.metric }));
 
@@ -455,7 +460,7 @@ function PeerAnalysisSubTabs({
   return (
     <div>
       <div className="mb-4 flex gap-1 border-b border-slate-200">
-        {(["profile", "growth"] as const).map((t) => (
+        {(["profile", "growth", "movement"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setSubTab(t)}
@@ -463,7 +468,7 @@ function PeerAnalysisSubTabs({
               subTab === t ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            {t === "profile" ? "Funding Profile" : "Growth Over Time"}
+            {t === "profile" ? "Funding Profile" : t === "growth" ? "Growth Over Time" : "Peer Movement"}
           </button>
         ))}
       </div>
@@ -561,6 +566,77 @@ function PeerAnalysisSubTabs({
           )}
 
           <PeerListExpander peerTable={peerTable} customPeerMode={customPeerMode} />
+        </div>
+      )}
+
+      {subTab === "movement" && (
+        <div>
+          {!movement || movement.peers.length === 0 ? (
+            <p className="text-sm text-slate-500">Movement data is not available for this window.</p>
+          ) : (
+            <>
+              <p className="mb-3 text-xs text-slate-500">
+                Rank and R&D growth for each peer over FY{movement.start}–FY{movement.end}.
+                Peers sorted by convergence (closing the gap on you) then proximity.
+              </p>
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-xs text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Institution</th>
+                      <th className="px-3 py-2 text-right font-medium">Rank ({movement.start}→{movement.end})</th>
+                      <th className="px-3 py-2 text-right font-medium">CAGR</th>
+                      <th className="px-3 py-2 text-right font-medium">Total R&D ({movement.end})</th>
+                      <th className="px-3 py-2 text-right font-medium">Gap vs You</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {movement.peers.map((p) => {
+                      const rankImproved = p.rank_delta !== null && p.rank_delta < 0;
+                      const behind = p.dollar_gap !== null && p.dollar_gap < 0;
+                      return (
+                        <tr key={p.inst_id} className={p.is_converging ? "bg-amber-50" : ""}>
+                          <td className="px-3 py-2">
+                            <span className="font-medium">{p.name}</span>
+                            {p.is_converging && (
+                              <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">converging</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {p.rank_start != null && p.rank_end != null ? (
+                              <span>
+                                #{p.rank_start} → #{p.rank_end}{" "}
+                                <span className={rankImproved ? "text-green-600" : "text-red-500"}>
+                                  ({rankImproved ? "+" : ""}{p.rank_delta !== null ? -p.rank_delta : "—"})
+                                </span>
+                              </span>
+                            ) : "—"}
+                          </td>
+                          <td className={`px-3 py-2 text-right ${p.cagr_pct !== null && p.cagr_pct > (movement.target.cagr_pct ?? 0) ? "font-semibold text-amber-700" : ""}`}>
+                            {p.cagr_pct !== null ? `${p.cagr_pct}%` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right">{formatDollars(p.total_rd_end)}</td>
+                          <td className={`px-3 py-2 text-right ${behind ? "text-slate-500" : "text-slate-800 font-medium"}`}>
+                            {p.dollar_gap !== null
+                              ? behind
+                                ? `${formatDollars(Math.abs(p.dollar_gap))} behind`
+                                : `${formatDollars(p.dollar_gap)} ahead`
+                              : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {movement.target.cagr_pct !== null && (
+                <p className="mt-2 text-xs text-slate-400">
+                  Your {movement.end - movement.start}-year CAGR: {movement.target.cagr_pct}%.
+                  Peers with higher CAGR (amber) are growing faster than you over this window.
+                </p>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

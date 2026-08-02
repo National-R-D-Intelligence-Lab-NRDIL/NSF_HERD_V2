@@ -1,3 +1,4 @@
+import { supabase } from "./supabase";
 import type {
   InstitutionListItem,
   InstitutionDetail,
@@ -8,6 +9,7 @@ import type {
   PeersResponse,
   GapResponse,
   PeerTrendResponse,
+  PeerMovementResponse,
   FieldPortfolioRow,
   FieldDrilldownRow,
   FieldMomentumRow,
@@ -29,6 +31,29 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`);
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+  }
+  return res.json();
+}
+
+async function getAuthHeaders(): Promise<HeadersInit> {
+  if (!supabase) return {};
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+  } catch {
+    // ignore — protected endpoints will return 401 if token is missing
+  }
+  return {};
+}
+
+async function getJsonAuth<T>(path: string): Promise<T> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}${path}`, { headers });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`${res.status} ${res.statusText}: ${detail}`);
@@ -69,7 +94,7 @@ export const getStrategicInsight = (
   const q = new URLSearchParams({ start: String(start), end: String(end) });
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
-  return getJson<StrategicInsight>(`/institutions/${instId}/insight?${q}`);
+  return getJsonAuth<StrategicInsight>(`/institutions/${instId}/insight?${q}`);
 };
 
 // --- filter helpers ---
@@ -114,6 +139,19 @@ export const getPeerTrend = (
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
   applyPeerFilters(q, opts.filters);
   return getJson<PeerTrendResponse>(`/peers/${instId}/trend?${q}`);
+};
+
+export const getPeerMovement = (
+  instId: string,
+  start = 2019,
+  end = 2024,
+  opts: { n?: number; peerIds?: string[]; filters?: PeerFilters } = {}
+) => {
+  const q = new URLSearchParams({ start: String(start), end: String(end) });
+  if (opts.n) q.set("n", String(opts.n));
+  if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
+  applyPeerFilters(q, opts.filters);
+  return getJson<PeerMovementResponse>(`/peers/${instId}/movement?${q}`);
 };
 
 // --- classifications ---
@@ -176,7 +214,7 @@ export const getSuggestedQuestions = (
   const q = new URLSearchParams({ start: String(start), end: String(end) });
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
-  return getJson<SuggestedQuestionsResponse>(`/institutions/${instId}/suggested-questions?${q}`);
+  return getJsonAuth<SuggestedQuestionsResponse>(`/institutions/${instId}/suggested-questions?${q}`);
 };
 
 // --- briefing ---
@@ -189,7 +227,7 @@ export const getBriefing = (
   const q = new URLSearchParams({ start: String(start), end: String(end) });
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
-  return getJson<BriefingResponse>(`/briefing/${instId}?${q}`);
+  return getJsonAuth<BriefingResponse>(`/briefing/${instId}?${q}`);
 };
 
 // --- qa ---
@@ -202,9 +240,10 @@ export async function askQuestion(payload: {
   end_year?: number;
   peer_inst_ids?: string[];
 }) {
+  const authHeaders = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/qa/ask`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {

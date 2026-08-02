@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from google import genai
 
+from auth import get_current_user
 from config import settings
 from db import get_pool, rows_to_dicts
 
@@ -169,6 +170,7 @@ async def get_strategic_insight(
     end: int = 2024,
     n: int | None = None,
     peer_ids: str | None = None,
+    user: dict = Depends(get_current_user),
 ):
     """LLM-generated strategic insight paragraph — ported from v1's
     generate_strategic_insight(). Uses whatever peer group (KNN or custom)
@@ -280,6 +282,7 @@ async def get_suggested_questions(
     end: int = 2024,
     n: int | None = None,
     peer_ids: str | None = None,
+    user: dict = Depends(get_current_user),
 ):
     """Rule-based, per-institution suggested questions for the Ask tab.
 

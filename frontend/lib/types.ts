@@ -244,6 +244,33 @@ export interface CandidatePoolSize {
   filtered: number;
 }
 
+export interface PeerMovementRow {
+  inst_id: string;
+  name: string;
+  rank_start: number | null;
+  rank_end: number | null;
+  rank_delta: number | null;
+  total_rd_end: number;
+  dollar_gap: number | null;
+  cagr_pct: number | null;
+  is_converging: boolean;
+}
+
+export interface PeerMovementResponse {
+  inst_id: string;
+  start: number;
+  end: number;
+  peers: PeerMovementRow[];
+  target: {
+    rank_start: number | null;
+    rank_end: number | null;
+    rank_delta: number | null;
+    total_rd_end: number | null;
+    cagr_pct: number | null;
+  };
+  custom_peer_mode: boolean;
+}
+
 export interface BriefingSection {
   title: string;
   body: string;

@@ -17,10 +17,11 @@ against Postgres -> Gemini summarizes the result. What changed:
 import asyncio
 import re
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from google import genai
 from pydantic import BaseModel
 
+from auth import get_current_user
 from config import settings
 from db import get_pool, rows_to_dicts
 
@@ -393,7 +394,7 @@ async def _execute_sql(sql: str):
 
 
 @router.post("/ask")
-async def ask(request: QARequest):
+async def ask(request: QARequest, user: dict = Depends(get_current_user)):
     context_block = _build_context_block(request)
 
     prompt = f"""You are an expert SQL analyst for the NSF HERD (Higher Education Research & Development) database.
