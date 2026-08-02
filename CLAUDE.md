@@ -1,9 +1,5 @@
 # NSF HERD v2 — Project Document
 
-> Copy this file into the new `nsf-herd-v2` repo as `CLAUDE.md` before starting any build work.
-
----
-
 ## Project Purpose
 
 Rebuild the NSF HERD Research Intelligence Platform using a modern data engineering stack. The current version (`nsf-herd-mvp`) is a working Streamlit app with raw Python scripts and SQLite. This rebuild serves two goals:
@@ -21,8 +17,8 @@ The current app tells VPRs where they are. This version tells them where to go.
 ┌─────────────────────────────────────────────────────────────┐
 │                        FRONTEND                              │
 │                                                              │
-│   React (or Reflex as bridge)                                │
-│   Charts: Recharts or Plotly React                           │
+│   React + Next.js                                            │
+│   Charts: Recharts                                           │
 │   Auth: Supabase Auth (same as v1)                           │
 │                                                              │
 ├──────────────────────┬──────────────────────────────────────-┤
@@ -132,8 +128,7 @@ nsf-herd-v2/
 │   ├── requirements.txt
 │   └── assets.py                    ← Dagster asset definitions
 │
-├── frontend/                        ← Phase 7 (React or Reflex)
-│   └── (scaffold later)
+├── frontend/                        ← Phase 7 (React + Next.js, done)
 │
 ├── .github/
 │   └── workflows/
@@ -142,23 +137,6 @@ nsf-herd-v2/
 └── docs/
     └── decisions.md                 ← architecture decision log
 ```
-
----
-
-## What Migrates From v1
-
-| v1 File | v2 Destination | What Changes |
-|---|---|---|
-| `scripts/etl/1_download.py` | `ingestion/herd_pipeline.py` | Rewritten as dlt pipeline |
-| `scripts/etl/2_transform.py` | `dbt/models/staging/stg_institutions.sql` | Python transforms become SQL models |
-| `scripts/etl/4_transform_fields.py` | `dbt/models/staging/stg_field_expenditures.sql` | Same |
-| `scripts/etl/5_transform_agencies.py` | `dbt/models/staging/stg_agency_funding.sql` | Same |
-| `src/query_engine.py` (direct queries) | `api/routers/*.py` | Functions become HTTP endpoints |
-| `src/query_engine.py` (NL-to-SQL) | `api/routers/qa.py` | Same logic, served via FastAPI |
-| `src/benchmarker.py` | `api/services/benchmarker.py` | Same KNN logic, loaded at API startup |
-| `app.py` (auth) | Keep Supabase Auth (same tables) | Frontend calls Supabase directly |
-| `app.py` (UI) | `frontend/` | Rebuilt in React or Reflex |
-| `data/herd.db` (SQLite) | Postgres tables | Data loaded via dlt + dbt |
 
 ---
 
@@ -193,30 +171,6 @@ nsf-herd-v2/
   - Flag peers whose rank delta is closing (convergence signal)
 - FastAPI endpoint: `GET /peers/{inst_id}/movement?years=5`
 - Returns: list of peers sorted by "threat level" (closing gap + high CAGR)
-
-**What you learn**: dbt window functions, mart modeling patterns, analytical SQL.
-
-**dbt model sketch**:
-```sql
-WITH peer_ranks AS (
-    SELECT
-        inst_id,
-        year,
-        total_rd,
-        RANK() OVER (PARTITION BY year ORDER BY total_rd DESC) AS national_rank
-    FROM {{ ref('stg_institutions') }}
-),
-rank_changes AS (
-    SELECT
-        inst_id,
-        MAX(CASE WHEN year = {{ var('end_year') }} THEN national_rank END)
-          - MAX(CASE WHEN year = {{ var('start_year') }} THEN national_rank END) AS rank_delta,
-        -- negative delta = improved (rank number decreased)
-        ...
-    FROM peer_ranks
-    GROUP BY inst_id
-)
-```
 
 ---
 
@@ -482,18 +436,6 @@ Phases were **not** built strictly in the order below. Actual build order:
 
 **Goal**: One command (`docker compose up`) gives you a running Postgres with the HERD schema.
 
-**Files to create**:
-- `docker-compose.yml` — Postgres service with persistent volume
-- `.env.example` — template for env vars
-- `scripts/seed.sql` — CREATE TABLE statements for all 3 tables
-- `scripts/load_seed_data.py` — Python script to copy data from `herd.db` (SQLite) into Postgres
-
-**What you learn**:
-- Docker containers, volumes, networks
-- Postgres basics (psql, CREATE TABLE, COPY)
-- Environment variables in Docker
-- The difference between SQLite (file) and Postgres (server)
-
 **Verify it works**:
 ```bash
 docker compose up -d
@@ -512,32 +454,6 @@ docker compose exec postgres psql -U herd -d herd_db -c "SELECT COUNT(*) FROM in
 ### Phase 2: dbt Core (Transformation + Tests) — ✅ Done
 
 **Goal**: Replace the 6 Python ETL scripts with SQL models that are tested and documented.
-
-**Files to create**:
-- `dbt/dbt_project.yml` — project config
-- `dbt/profiles.yml` — Postgres connection (reads from env vars)
-- `dbt/models/staging/stg_institutions.sql` — clean raw data
-- `dbt/models/staging/stg_field_expenditures.sql`
-- `dbt/models/staging/stg_agency_funding.sql`
-- `dbt/models/staging/_staging.yml` — column descriptions + tests
-- `dbt/models/marts/mart_rankings.sql` — precomputed national ranks per year
-- `dbt/models/marts/mart_peer_metrics.sql` — CAGR, growth rank, gap analysis
-- `dbt/models/marts/mart_field_portfolio.sql` — field shares, momentum data
-- `dbt/models/marts/mart_peer_movement.sql` — peer convergence tracking (Feature 2)
-- `dbt/models/marts/mart_trajectories.sql` — forward projections (Feature 3)
-- `dbt/models/marts/_marts.yml` — schema + tests
-- `dbt/tests/assert_field_totals_equal_total_rd.sql` — invariant test
-- `dbt/tests/assert_agency_sums_equal_federal.sql` — invariant test
-- `dbt/tests/assert_subfield_sums_equal_parent.sql` — invariant test
-- `dbt/macros/cagr.sql` — reusable CAGR computation
-
-**What you learn**:
-- dbt model types (staging vs marts)
-- dbt tests (generic: not_null, unique, accepted_values; singular: custom SQL assertions)
-- dbt documentation (YAML schema files)
-- ref() for model dependencies (automatic DAG)
-- Jinja templating in SQL
-- The staging → mart pattern (ELT, not ETL)
 
 **Verify it works**:
 ```bash
@@ -570,31 +486,7 @@ dbt docs generate && dbt docs serve  # visual DAG + docs
 
 **Status**: `institutions`, `peers`, `portfolio`, `federal`, `qa`, `classifications` routers are built and verified. `briefing` (Feature 4) is built in **reduced scope** — narrative-only JSON, no scenario or projection claims, `GET` instead of `POST` (no input to simulate, just reads whatever peer group is active) — see `docs/decisions.md` ("[Feature 4] Narrative Briefing"). `scenarios` (Feature 1) and `projections` (Feature 3) remain explicitly deferred — not forgotten. Both also depend on Phase 4 (DuckDB) per the original design.
 
-**Files to create**:
-- `api/Dockerfile`
-- `api/requirements.txt`
-- `api/main.py` — FastAPI app with CORS, startup events
-- `api/config.py` — env var loading (DATABASE_URL, GEMINI_API_KEY, etc.)
-- `api/db.py` — Postgres connection pool + DuckDB connection
-- `api/routers/institutions.py` — list, detail, rank trend, anchor view
-- `api/routers/peers.py` — KNN peers, gap analysis, peer trend
-- `api/routers/portfolio.py` — field breakdown, momentum, drilldown, distinctiveness
-- `api/routers/federal.py` — agency breakdown, trends, concentration, distinctiveness
-- `api/routers/scenarios.py` — what-if simulation (Feature 1)
-- `api/routers/projections.py` — forward trajectory (Feature 3)
-- `api/routers/qa.py` — natural language Q&A (port from v1)
-- `api/routers/briefing.py` — narrative export (Feature 4)
-- `api/services/benchmarker.py` — KNN logic (port from v1 `src/benchmarker.py`)
-- `api/services/scenario_engine.py` — what-if computation logic
-- `api/services/narrative.py` — LLM-based briefing generation
-
-**What you learn**:
-- FastAPI routing, request/response models (Pydantic)
-- Dependency injection (database connections)
-- Async Python (async def endpoints)
-- API documentation (auto-generated OpenAPI/Swagger at /docs)
-- Connection pooling (asyncpg or psycopg pool)
-- Separation of concerns (router → service → database)
+**Remaining to build**: `api/routers/scenarios.py` (Feature 1), `api/routers/projections.py` (Feature 3), `api/services/scenario_engine.py` — all blocked on Phase 4 (DuckDB).
 
 **Verify it works**:
 ```bash
@@ -730,34 +622,7 @@ def herd_dbt_assets(context, dbt: DbtCliResource):
 
 **Goal**: Replace Streamlit with a modern frontend that calls the FastAPI backend.
 
-**Decision made**: Option B (React + Next.js). Built and reaffirmed even after discovering the project owner doesn't yet know TypeScript — reasoning and trade-off logged in `docs/decisions.md` ("[Phase 7] Frontend stack reaffirmed"); `docs/learning.md` added as a primer to offset the maintainability gap. Full v1 feature parity reached (Snapshot, Portfolio, Federal, Ask tabs) plus one feature beyond v1 (per-institution suggested questions).
-
-**Two options considered**:
-
-**Option A: Reflex (Python bridge — learn React patterns without JavaScript)**
-- Write in Python, compiles to React
-- Good stepping stone if JavaScript is new
-- Less impressive on resume than pure React but teaches the right mental models
-- **Rejected** — would have thrown away the already-built, already-verified Next.js app
-
-**Option B: React + Next.js (production standard)** — **chosen**
-- TypeScript, component model, state management
-- Recharts or Plotly React for charts
-- Supabase Auth SDK for login
-- Deploy to Vercel
-
-**What you learn**:
-- Component-based UI architecture
-- Frontend/backend separation
-- API consumption from a browser
-- State management (React hooks or Zustand)
-- Responsive design (CSS, Tailwind)
-
-**Build order within this phase**:
-1. Institution picker + KPI cards (simplest — one API call, render data)
-2. Peer comparison charts (Recharts bar chart from /peers/{id}/gap)
-3. Scenario slider (interactive — POST to /scenarios/simulate, re-render)
-4. Q&A chat interface (most complex — streaming, history, code blocks)
+**Stack**: React + Next.js (TypeScript), Recharts, Supabase Auth SDK. Full v1 parity reached (Snapshot, Portfolio, Federal, Ask tabs) plus per-institution suggested questions, unified peer-set selection UX, historical year selector with two-year side-by-side compare, and client-side PDF briefing export (jsPDF, lazy-loaded). See `docs/decisions.md` ("[Phase 7] Frontend stack reaffirmed") for decision reasoning.
 
 ---
 
@@ -933,14 +798,3 @@ After every build step, append an entry to `docs/decisions.md`. Keep it high-lev
 - **Ask one clarifying question max**: Then proceed.
 - **Understand before moving on**: After Claude generates code, read every line. If you can't explain it, ask Claude to explain before proceeding.
 
----
-
-## How to Start
-
-1. Create the repo: `mkdir nsf-herd-v2 && cd nsf-herd-v2 && git init`
-2. Copy this file as `CLAUDE.md`
-3. Tell Claude Code: "Start Phase 1. Create docker-compose.yml with Postgres."
-4. Follow the verify steps
-5. When green, tell Claude Code: "Phase 1 verified. Start Phase 2."
-
-Each phase builds on the previous. The document tells Claude Code exactly what to build, in what order, with what constraints.
