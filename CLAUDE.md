@@ -11,6 +11,46 @@ The current app tells VPRs where they are. This version tells them where to go.
 
 ---
 
+## Current Context (as of 2026-08-02)
+
+### Licensing & Commercial Status
+An invention disclosure has been filed with the UNT Tech Transfer Office to license the tool. The near-term goal is to give it away to a small set of universities for beta testing, gather feedback and testimonials, and then open it up more broadly. The tool is not yet public.
+
+### Immediate Goal: Beta Launch with ~10 Invited Users
+The next phase is hardening the tool for a small, controlled group of university research administrators (VPRs, AVPs, research development staff). Key requirements:
+
+- **Invite-only auth** — no self-signup. We create each account manually and set an initial password. Users can reset their own password but cannot register themselves.
+- **Controlled seats** — ~10 users max for the beta. Every account is personally assigned.
+- **Usage tracking** — log which pages users visit, what questions they type into Q&A, and session time. This is research data for product decisions and testimonials.
+- **AI feature toggle** — ability to enable or disable the Ask a Question tab per user, without a code change, in case a beta user doesn't want or need the AI feature.
+- **No file uploads** — there are none in the current tool; confirm and keep it that way.
+
+### Cloud Strategy
+Moving API + Postgres to Google Cloud Platform (GCP) to use $300 free credit (~6 months of runway at current scale). The stack is fully cloud-agnostic — everything runs via `docker compose up` on any Linux VM. When credits run out, migrating to another provider (Hetzner, DigitalOcean, etc.) is: `pg_dump` the database, `git clone` on the new server, `docker compose up`. No code changes required.
+
+The Gemini API key will be swapped to a new GCP account key — same model, same behavior, just billed against the GCP credit instead of a personal account.
+
+### What Was Built in This Session (2026-08-02)
+- CLAUDE.md cleaned up — removed obsolete planning content (commit `67ae813`)
+- Auth hardened — sign-out button added to header, "Forgot password?" flow added to login page, `/reset-password` page created for the password reset callback (commit `b686b71`)
+- Supabase CLI installed (v2.111.0) — next step is `supabase login` (user must run this; opens browser)
+
+### Supabase Project
+- **Project ref**: `qnlxfrcajoxjqvckysyt`
+- **Project URL**: `https://qnlxfrcajoxjqvckysyt.supabase.co`
+
+### Immediate Next Steps (in order)
+1. User runs `supabase login` in their own terminal (opens browser — cannot be automated)
+2. Run `supabase init` + `supabase link --project-ref qnlxfrcajoxjqvckysyt`
+3. Disable self-signup in Supabase (Management API or dashboard)
+4. Whitelist `/reset-password` as an allowed redirect URL in Supabase
+5. Invite first beta user accounts via Supabase admin API
+6. Deploy to GCP — single VM, `docker compose up`, swap Gemini API key
+7. Build usage tracking (page visits, Q&A questions, session time → Postgres table)
+8. Build AI feature toggle (per-user flag to show/hide Ask tab)
+
+---
+
 ## Architecture Overview
 
 ```
@@ -412,7 +452,7 @@ The tool serves a wider audience than just VPRs. Below is the full map of person
 
 ## Build Phases
 
-### Current Status (as of 2026-07-12)
+### Current Status (as of 2026-08-02)
 
 Phases were **not** built strictly in the order below. Actual build order:
 
@@ -424,11 +464,10 @@ Phases were **not** built strictly in the order below. Actual build order:
 | 4. DuckDB | ⬜ Not started | Skipped in favor of Phase 7 — revisit before Features 1/3 (scenario/projection) can be built |
 | 5. Dagster | ⬜ Not started | Skipped in favor of Phase 7 |
 | 6. GitHub Actions CI | ⬜ Not started | Skipped in favor of Phase 7 |
-| 7. Frontend | ✅ Done | Built immediately after Phase 3, ahead of Phases 4–6. Next.js/React chosen over Reflex (see decision below). Full v1 parity + per-institution suggested questions, unified peer-set selection UX, historical year selector with two-year side-by-side compare, and client-side PDF briefing export (jsPDF, lazy-loaded — no server-side PDF dependency) |
+| 7. Frontend | ✅ Done | Next.js/React. Full v1 parity + suggested questions, unified peer-set UX, year selector, side-by-side compare, client-side PDF briefing export (jsPDF). |
+| 8. Beta Launch Hardening | 🔄 In progress | Invite-only auth (code done, Supabase config pending), GCP deployment, usage tracking, AI feature toggle. See "Current Context" section above. |
 
-**Why the order changed**: after Phase 3 shipped a usable read API, the call was made to get a demoable end-to-end product (API + UI) working before investing in DuckDB/Dagster/CI, which have no user-visible payoff on their own. Phases 4–6 are not abandoned — see the revisit trigger logged in `docs/decisions.md` ("[Phase 7] Frontend stack reaffirmed").
-
-**Revisit trigger**: Feature 4 (briefing) was picked back up on 2026-07-12 and built in reduced scope — narrative-only, no scenario/projection claims — precisely because Features 1 (Scenario Modeling) and 3 (Forward Projection) aren't built yet and DuckDB (Phase 4) is a prerequisite for both. Feature 2 (Peer Movement Tracker) still remains unbuilt. Next work should return to either (a) Phases 4–6 in order, or (b) Features 1/2/3 directly. Decide explicitly before starting; don't let this drift again.
+**Next decision point**: After Phase 8 (beta launch) is complete and feedback is gathered, decide explicitly whether to return to Phases 4–6 (DuckDB, Dagster, CI) or to build Features 1/2/3 (scenario modeling, peer movement, forward projection) directly. Do not let this drift.
 
 ---
 
