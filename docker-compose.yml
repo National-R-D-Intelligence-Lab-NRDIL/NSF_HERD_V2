@@ -51,7 +51,6 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
     ports:
       - "8000:8000"
     depends_on:

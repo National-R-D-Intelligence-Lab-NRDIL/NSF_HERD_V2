@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import db
+from auth import fetch_jwks
 from config import settings
 from services.benchmarker import AutoBenchmarker, fetch_university_features, fetch_classifications
 from routers import institutions, peers, portfolio, federal, qa, classifications, briefing
@@ -21,6 +22,10 @@ async def lifespan(app: FastAPI):
     app.state.benchmarker = AutoBenchmarker(n_peers=settings.n_peers_default).fit(
         features_df, classifications_df
     )
+
+    # Fetch Supabase's public JWT signing keys once at startup — auth
+    # dependency (auth.get_current_user) verifies tokens against this cache.
+    fetch_jwks()
 
     yield
 
