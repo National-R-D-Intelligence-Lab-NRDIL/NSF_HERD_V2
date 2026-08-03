@@ -297,4 +297,33 @@ User feedback on the first version (3 screenshots) was that the one-page PDF was
 
 ### Open questions
 - Same as prior briefing entry: Features 1/2/3 (scenario modeling, peer movement, projections) and Phase 4 (DuckDB) are still unbuilt; this briefing remains backward-looking only.
+
+---
+
+## [Phase 8] GCP beta deploy — database load, prod frontend build, disk resize — 2026-08-03
+
+### What was built
+- **Database loaded onto the GCP VM**: `pg_dump --clean --if-exists` of the local `herd_db` (9 tables + 4 dbt-built `stg_*` views, 70MB) transferred via `gcloud compute scp` and restored into the VM's `herd_postgres` container. This was beta-launch checklist item #3.
+- **Frontend switched from `next dev` to a production build.** `frontend/Dockerfile` now runs `npm run build` at image-build time (with `NEXT_PUBLIC_API_URL`/`NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` passed as Docker build `ARG`s, since Next.js inlines `NEXT_PUBLIC_*` vars into the client bundle at build time, not at container-start time) and `CMD` runs `npm run start`. `docker-compose.yml`'s `frontend` service no longer bind-mounts source or overrides the command. A new `docker-compose.override.yml` (auto-loaded by a bare `docker compose up`, excluded on the VM via explicit `-f docker-compose.yml`) restores the old bind-mount + `npm run dev` behavior for local development only.
+- **GCP boot disk resized from 10GB to 30GB** (`gcloud compute disks resize`, then `growpart` + `resize2fs` online, no reboot) after hitting "No space left on device" twice — once from accumulated Docker build cache (2.3GB reclaimed via `docker builder prune`), and again when the disk was too small to hold the production build's `node_modules` (~900MB) + `.next` output (~340MB) headroom.
+- Corrected two stale facts from CLAUDE.md's "GCP Deployment" section along the way: the VM's actual zone is `us-south1-b` (doc said `us-central1-a`), and the repo lives at `/home/kalyan8358/NSF_HERD_V2` under SSH user `kalyan8358` — but `gcloud compute ssh` connects as a different local-machine-derived user (`kalya`, home `/home/kalya`), which matters for any file transfer or path assumption made via `gcloud compute scp/ssh`.
+
+### Why
+A routine "fix `NEXT_PUBLIC_API_URL`" task (the frontend was hardcoded to `localhost:8000` on the VM) turned into a multi-layer debugging chain: the env var fix alone didn't work because (1) Next's dev-mode Turbopack cache persists across `docker compose restart` in the same anonymous `/app/.next` volume, so the old compiled bundle kept being served, and (2) once the cache was cleared, Next 16's dev server blocked cross-origin requests to its own HMR channel from the GCP IP. Both problems are specific to running `next dev` in a deployed, publicly-reachable environment — a dev server was never designed to be the thing real users hit. Fixing the underlying cause (run a real production build) was judged more durable than patching around dev-mode's cache/CORS quirks a second time.
+
+### Key decisions
+- **Production build over patching dev mode further** — `allowedDevOrigins` alone would have silenced today's specific error, but left the stale-Turbopack-cache failure mode (and the general fragility of serving `next dev` to real users) intact for the next deploy. A production build eliminates both: `next build` output is minified with content-hashed chunk filenames (e.g. `1hyfzrsu08azf.js`), so a new deploy can never silently serve a stale bundle under the same URL the way dev-mode's stable filenames did.
+- **`docker-compose.override.yml` for the dev-only bind mounts**, rather than editing `docker-compose.yml` differently per environment — Compose auto-loads `*.override.yml` with a bare `docker compose up` (preserving the exact local dev experience: live-mount + hot reload), while the documented VM deploy command explicitly passes `-f docker-compose.yml` to exclude it. One base file stays "prod-shaped" by default; local dev opts into convenience rather than prod opting out of it.
+- **`NEXT_PUBLIC_*` values passed as Docker build `args`, not just runtime `environment`** — required because `next build` bakes these into the static client bundle; a runtime-only env var (as originally configured) would have been read as `undefined` during the image build and silently fallen back to `localhost:8000` in the production bundle, permanently this time (no restart would fix it, only a rebuild with the value present at build time).
+- **Resize the disk (30GB) over a one-time cleanup** — the VM had already hit "no space" twice in one session from two different causes (build cache, then build headroom); a 10GB boot disk running Docker + Postgres + Next.js builds was undersized for the project's trajectory (the pending full HERD dataset load is next), not just for today's specific build.
+
+### Alternatives rejected
+- Only adding `allowedDevOrigins` and leaving `next dev` in production — rejected; doesn't address the stale-cache failure mode or the general risk of running a dev server as the production frontend.
+- Editing `docker-compose.yml` directly for prod and hand-reverting for local dev — rejected in favor of the override-file pattern, which needs no manual toggling and can't be forgotten.
+- One-time `docker image prune`/`builder prune` cleanup instead of a disk resize — rejected as a recurring-fire-drill fix rather than addressing the underlying undersized-disk cause, especially with the full database load (checklist item #3, now done, but the eventual multi-year full HERD dataset is larger) and future rebuilds still ahead.
+
+### Open questions
+- CLAUDE.md's GCP Deployment section needs its zone (`us-south1-b`) and deploy-command (`docker compose -f docker-compose.yml up -d --build`, to exclude the override file) corrected — tracked as a follow-up doc update alongside this entry.
+- No CI/health-check yet catches "frontend is silently serving a stale/wrong bundle" class of bug automatically (Phase 6, GitHub Actions CI, is still not started); today's diagnosis was entirely manual (inspecting served JS chunks). Worth a lightweight smoke test post-deploy once Phase 6 is picked up.
+- Single-VM deployment (no redundancy, no TLS, no zero-downtime deploys) remains a deliberate scope choice for a ~10-user invite-only beta, not an oversight — revisit if/when usage or user count grows past what a single VM comfortably serves.
 - No automated tests yet for the new `key_metrics`/`peer_table`/`rank_trend` fields — verified manually via `curl` against `inst_id=003594` after `docker compose restart api`, and `tsc --noEmit` passes clean on the frontend.

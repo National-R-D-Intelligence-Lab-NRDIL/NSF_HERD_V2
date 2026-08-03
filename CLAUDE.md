@@ -26,28 +26,61 @@ The next phase is hardening the tool for a small, controlled group of university
 - **No file uploads** — there are none in the current tool; confirm and keep it that way.
 
 ### Cloud Strategy
-Moving API + Postgres to Google Cloud Platform (GCP) to use $300 free credit (~6 months of runway at current scale). The stack is fully cloud-agnostic — everything runs via `docker compose up` on any Linux VM. When credits run out, migrating to another provider (Hetzner, DigitalOcean, etc.) is: `pg_dump` the database, `git clone` on the new server, `docker compose up`. No code changes required.
+Using Google Cloud Platform (GCP) with $300 free credit (~6 months of runway). The stack is fully cloud-agnostic — everything runs via `docker compose up` on any Linux VM. When credits run out, migrating is: `pg_dump` the database, `git clone` on the new server, `docker compose up`. No code changes required.
 
-The Gemini API key will be swapped to a new GCP account key — same model, same behavior, just billed against the GCP credit instead of a personal account.
+### GCP Deployment (in progress as of 2026-08-03)
+- **Project**: `project-0e3d6e05-0399-4ccc-aa0` (My First Project)
+- **VM**: `nsf-herd-server`, zone `us-south1-b`, machine type `e2-medium`
+- **Boot disk**: `nsf-herd-server`, 30GB (resized from 10GB on 2026-08-03 — Docker + Postgres + Next.js production builds don't fit in 10GB; see `docs/decisions.md` "[Phase 8] GCP beta deploy")
+- **External IP**: `34.174.156.116`
+- **Repo path on VM**: `/home/kalyan8358/NSF_HERD_V2`, owned by SSH user `kalyan8358`. Note: `gcloud compute ssh`/`scp` connects as a *different*, locally-derived user (e.g. `kalya`) with its own home dir — file transfers via `gcloud compute scp` land in that user's home, not `kalyan8358`'s, and need `sudo` to reach the repo.
+- **Frontend**: `http://34.174.156.116:3000`
+- **API**: `http://34.174.156.116:8000`
+- **Firewall rules**: ports 3000 and 8000 open (`allow-app-ports`)
+- **Status**: VM running, DB loaded, frontend running a production build (`next build`/`next start`, not dev server — see below), verified working end-to-end
 
-### What Was Built in This Session (2026-08-02)
-- CLAUDE.md cleaned up — removed obsolete planning content (commit `67ae813`)
-- Auth hardened — sign-out button added to header, "Forgot password?" flow added to login page, `/reset-password` page created for the password reset callback (commit `b686b71`)
-- Supabase CLI installed (v2.111.0) — next step is `supabase login` (user must run this; opens browser)
+**How to deploy updates:**
+1. Push changes to GitHub from laptop
+2. SSH into VM via GCP Console → Compute Engine → VM instances → SSH button
+3. `cd NSF_HERD_V2 && git pull`
+4. `sudo docker compose -f docker-compose.yml up -d --build` — the explicit `-f` matters: a bare `docker compose up` auto-loads `docker-compose.override.yml`, which switches the frontend back to `npm run dev` (that file exists only to preserve the live-reload dev experience on a local laptop; on the VM it must be excluded)
 
-### Supabase Project
-- **Project ref**: `qnlxfrcajoxjqvckysyt`
-- **Project URL**: `https://qnlxfrcajoxjqvckysyt.supabase.co`
+**Frontend runs a production build, not `next dev`.** This was a deliberate fix (2026-08-03) after a stale Turbopack dev-cache and a dev-mode cross-origin guard caused a silent, hard-to-diagnose deploy bug — see `docs/decisions.md` "[Phase 8] GCP beta deploy" for the full chain. `NEXT_PUBLIC_*` env vars are passed as Docker build `args` (not just runtime `environment`), since Next.js inlines them into the client bundle at `next build` time — a runtime-only env var is read as `undefined` during the build and gets baked in wrong, permanently, until the next rebuild.
 
-### Immediate Next Steps (in order)
-1. User runs `supabase login` in their own terminal (opens browser — cannot be automated)
-2. Run `supabase init` + `supabase link --project-ref qnlxfrcajoxjqvckysyt`
-3. Disable self-signup in Supabase (Management API or dashboard)
-4. Whitelist `/reset-password` as an allowed redirect URL in Supabase
-5. Invite first beta user accounts via Supabase admin API
-6. Deploy to GCP — single VM, `docker compose up`, swap Gemini API key
-7. Build usage tracking (page visits, Q&A questions, session time → Postgres table)
-8. Build AI feature toggle (per-user flag to show/hide Ask tab)
+**How to migrate away from GCP when credits run out:**
+1. `sudo docker exec herd_postgres pg_dump -U herd herd_db > dump.sql` (on old VM)
+2. Copy dump to new server
+3. `git clone` repo on new server
+4. Create `.env` with same values
+5. `sudo docker compose -f docker-compose.yml up -d --build` (the explicit `-f` excludes `docker-compose.override.yml`, which is dev-only — see "How to deploy updates" above)
+6. Restore dump into new Postgres
+
+### Auth — Completed (2026-08-02)
+- Invite-only signup enforced via Supabase config (`enable_signup = false`)
+- Login page has "Forgot password?" flow
+- `/reset-password` page handles password reset callback
+- Sign-out button in app header
+- Supabase project ref: `qnlxfrcajoxjqvckysyt`
+- First beta user invited: `kalyan8358@gmail.com`
+
+**To invite a new beta user** (run from local machine with service role key):
+```bash
+curl -X POST "https://qnlxfrcajoxjqvckysyt.supabase.co/auth/v1/invite" \
+  -H "apikey: SERVICE_ROLE_KEY" \
+  -H "Authorization: Bearer SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@university.edu", "redirect_to": "http://34.174.156.116:3000/reset-password"}'
+```
+Service role key is in Supabase dashboard → Settings → API → service_role. Do not commit it.
+
+### Remaining for Beta Launch (in order)
+1. ✅ Auth lockdown (invite-only, password reset, sign-out)
+2. ✅ GCP deployment (VM running, app built)
+3. ✅ Load database onto GCP VM (pg_dump local → restore on VM) — done 2026-08-03
+4. ⬜ Update Supabase redirect URLs to use GCP IP instead of localhost
+5. ⬜ Build usage tracking (page visits, Q&A questions → Postgres table)
+6. ⬜ Build AI feature toggle (per-user flag to show/hide Ask tab)
+7. ⬜ Make GitHub repo private again
 
 ---
 
