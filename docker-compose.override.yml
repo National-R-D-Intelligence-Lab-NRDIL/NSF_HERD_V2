@@ -1,0 +1,7 @@
+services:
+  frontend:
+    volumes:
+      - ./frontend:/app          # live-mount code — no rebuild needed after edits
+      - /app/node_modules        # keep container's node_modules, don't overwrite from host
+      - /app/.next
+    command: ["npm", "run", "dev"]
