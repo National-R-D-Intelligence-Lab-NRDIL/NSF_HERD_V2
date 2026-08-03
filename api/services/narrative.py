@@ -41,7 +41,7 @@ async def _generate_content(prompt: str):
     for attempt in range(3):
         try:
             return await client.aio.models.generate_content(
-                model="gemini-2.5-flash", contents=prompt
+                model="gemini-3.5-flash", contents=prompt
             )
         except Exception as e:
             if "503" in str(e) and attempt < 2:

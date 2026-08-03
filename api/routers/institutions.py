@@ -258,7 +258,7 @@ Rules:
 - The growth comparison MUST reflect the actual numbers above. If target growth is below the peer avg, do NOT say it exceeds peers."""
 
     try:
-        response = await _genai_client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = await _genai_client.aio.models.generate_content(model="gemini-3.5-flash", contents=prompt)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Gemini request failed: {e}")
 
