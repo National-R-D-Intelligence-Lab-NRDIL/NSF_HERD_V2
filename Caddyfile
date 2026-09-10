@@ -1,0 +1,9 @@
+app.herdintel.app {
+	tls internal
+	reverse_proxy frontend:3000
+}
+
+api.herdintel.app {
+	tls internal
+	reverse_proxy api:8000
+}

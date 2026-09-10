@@ -76,5 +76,20 @@ services:
     depends_on:
       - api
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: herd_caddy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+    depends_on:
+      - frontend
+      - api
+
 volumes:
   pgdata:
+  caddy_data:
