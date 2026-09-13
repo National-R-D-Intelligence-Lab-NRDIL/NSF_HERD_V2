@@ -283,3 +283,52 @@ export async function removeAdminUser(userId: string) {
   }
   return res.json();
 }
+
+// --- usage tracking ---
+// One id per browser session (tab open -> close), used to group events
+// into a "visit" without a separate sessions table. Cleared on sign-out
+// so logging back in in the same tab starts a fresh session.
+const USAGE_SESSION_KEY = "herd_usage_session_id";
+
+function getUsageSessionId(): string {
+  if (typeof window === "undefined") return "";
+  let id = sessionStorage.getItem(USAGE_SESSION_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    sessionStorage.setItem(USAGE_SESSION_KEY, id);
+  }
+  return id;
+}
+
+export function resetUsageSession() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(USAGE_SESSION_KEY);
+  sessionStorage.removeItem("herd_session_start_logged");
+}
+
+// Fire-and-forget: never awaited by callers, never throws, never blocks
+// the UI. If this fails (network blip, not logged in yet), it silently
+// no-ops -- logging must never break the app.
+export async function logEvent(
+  eventType: string,
+  opts: { institution?: string; tab?: string; question?: string; metadata?: object } = {}
+) {
+  try {
+    const authHeaders = await getAuthHeaders();
+    if (!("Authorization" in authHeaders)) return;
+    await fetch(`${BASE_URL}/usage/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({
+        event_type: eventType,
+        session_id: getUsageSessionId(),
+        institution: opts.institution,
+        tab: opts.tab,
+        question: opts.question,
+        metadata: opts.metadata,
+      }),
+    });
+  } catch {
+    // fire-and-forget -- never let logging break the app
+  }
+}

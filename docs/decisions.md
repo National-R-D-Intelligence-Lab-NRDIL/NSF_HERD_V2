@@ -386,3 +386,34 @@ While testing the invite flow end-to-end (not just trusting that it matched the 
 - Beta invite emails (the current stock Supabase "You have been invited" template) are landing in Gmail spam — most likely because the unmodified default template text is a known pattern flagged across many unrelated Supabase projects, not primarily a `herdintel.app` domain-reputation issue. Drafted replacement subject/body copy for Kalyan to paste into Supabase Dashboard → Authentication → Email Templates; not yet applied (Supabase dashboard config, outside this repo, must be done by Kalyan). Revisit whether Reset Password and other templates need the same treatment.
 - Whether any of the 4 real beta users invited before this fix (all showing successful past sign-ins) were actually affected by the redirect_to bug is unconfirmed — not investigated as part of this change.
 - Usage tracking (item 2) is next.
+
+---
+
+## [Beta Hardening] Usage tracking — 2026-09-13
+
+### What was built
+- New Supabase table `v2_usage_events` (id, user_id, email, session_id, event_type, institution, tab, question, metadata, created_at), created directly in the hosted project via the SQL editor. Deliberately isolated from v1's `usage_log` table (v1 is no longer used by anyone, but Kalyan wants v2's data kept separate rather than commingled).
+- New `POST /usage/log` endpoint (`api/routers/usage.py`), protected by the existing `get_current_user` JWT dependency. Validates `event_type` against a fixed allow-list, then inserts a row into `v2_usage_events` via Supabase's REST API using the service_role key (the same secret added earlier for the admin dashboard). `user_id`/`email` on every row come from the verified JWT, never from client-supplied fields.
+- Frontend instrumentation, all fire-and-forget via a new `logEvent()` helper in `frontend/lib/api.ts` (never awaited by callers, swallows its own errors): `session_start` (once per browser session, on the existing auth-check effect in `page.tsx`, covering both fresh logins and reloads of a persisted session) and `session_end` (on the "Sign out" click, logged before the Supabase session is torn down), `tab_view` (every tab switch), `institution_view` (deduped -- only when the selection actually changes, same as v1's pattern), `qa_question` (the actual question text, logged in `QaTab.tsx`), `peer_filter_change` (the filter object as `metadata`, in `page.tsx`), and `briefing_export` (in `BriefingButton.tsx`, after a successful PDF render).
+- A `session_id` (UUID, `sessionStorage`-backed) groups events into a single browsing session without a separate sessions table; it's reset on sign-out so logging back in in the same tab starts a fresh session.
+
+### Why
+Beta checklist item 5 -- the real priority per the reordering logged in the admin-dashboard entry above. Needed both for weekly product-improvement decisions (which tabs/features get used, what people ask the AI) and as evidence for the pilot NDA and testimonials.
+
+### Key decisions
+- **New table, not a shared one with v1** -- explicit call from Kalyan: v1 (`nsf-herd-mvp`) is still deployed but no longer used by anyone, and while writing into the same `usage_log` table would have preserved historical continuity, Kalyan wants v2's data cleanly separated rather than commingled with a decommissioned app's schema.
+- **Feature-level event tracking, not DOM-level click/heatmap tracking** -- considered and explicitly rejected a third-party product-analytics tool (e.g. PostHog) that would give click heatmaps and session replay out of the box. Rejected specifically because the pilot NDA's data-handling commitments (aggregate reporting, retention, deletion) are far easier to honor when the data lives in a Postgres table Kalyan fully controls, versus sending user behavior to a third-party vendor. "Time spent" is derived from gaps between consecutive logged events (tab_view, institution_view, etc.) rather than a continuous heartbeat or exit-beacon -- simpler, no extra background network traffic, adequate for weekly directional decisions at this user count.
+- **RLS enabled with zero policies** on `v2_usage_events`, tighter than v1's `usage_log` (which has RLS disabled entirely so the anon key can write directly from the browser). Because all v2 writes go through this backend endpoint (never directly from the browser), only the service_role key needs write access, and it always bypasses RLS -- so no policy needs to be written at all. The anon key gets nothing.
+- **No explicit tab-close/exit tracking (no `sendBeacon`)** -- `navigator.sendBeacon` can't carry a custom `Authorization` header, and reworking the endpoint to accept an unauthenticated beacon just for this felt like more complexity than the benefit justified. Accepted tradeoff: someone who closes the tab without clicking "Sign out" won't get an explicit `session_end` row; session length for those sessions is approximated from the last real event instead.
+
+### Alternatives rejected
+- Reusing v1's `usage_log` table directly -- rejected per Kalyan's explicit preference for isolation between the two apps' data, even though v1 is dormant.
+- The `tenants`/`user_profiles`/`usage_events` schema originally sketched in `docs/implementation-plan.md` -- rejected because it assumes multi-tenancy (Feature 2) is already built, which it isn't and isn't planned for the current beta; that plan's `tenant_id` foreign key has nothing to reference today.
+- A continuous "heartbeat" ping for precise active-time-per-tab measurement -- rejected as unnecessary engineering for a ~10-user beta; gaps between discrete events are precise enough for weekly product decisions.
+
+### Bug encountered and fixed (tooling, not app code)
+While testing, `/usage/log` calls silently never left the browser (not even a CORS preflight reached the API) despite the code being correct and `tsc --noEmit` passing clean. Root cause: `herd_frontend`'s dev server (Turbopack, bind-mounted from the Windows host into the Linux container) hadn't picked up the file changes via hot-reload -- a `docker restart herd_frontend` immediately fixed it. Worth remembering for future frontend changes tested locally: if new code doesn't seem to run despite compiling cleanly, restart the frontend container rather than assuming a logic bug.
+
+### Open questions
+- Whether Kalyan wants a lightweight weekly report/view over this data, or will keep querying it ad hoc in the Supabase table editor as needed -- not built either way; deliberately out of scope for this change (see the admin-dashboard entry's note that a usage view is "just displaying this data once it exists, not its own feature").
+- The email-template spam fix (drafted copy, not yet applied) and the AI feature toggle (beta checklist item 6) remain open, in that order.

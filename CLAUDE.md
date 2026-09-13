@@ -106,7 +106,7 @@ Service role key is in Supabase dashboard → Settings → API → service_role.
 2. ✅ GCP deployment (VM running, app built)
 3. ✅ Load database onto GCP VM (pg_dump local → restore on VM) — done 2026-08-03
 4. ✅ Update Supabase redirect URLs to use GCP IP instead of localhost — done 2026-08-03 (also reserved the VM's IP as static; see `docs/decisions.md` "[Phase 8] GCP static IP + Supabase redirect URLs")
-5. ⬜ Build usage tracking (page visits, Q&A questions → Postgres table) — **next real priority**, blocking the pilot NDA's data-handling commitments (aggregate reporting, retention, deletion)
+5. ✅ Build usage tracking (page visits, Q&A questions → `v2_usage_events` table in Supabase) — done 2026-09-13, see `docs/decisions.md` "[Beta Hardening] Usage tracking"
 6. ⬜ Build AI feature toggle (per-user flag to show/hide Ask tab)
 7. ✅ Make GitHub repo private again — confirmed done
 8. ✅ Patch security vulnerabilities (Next.js, python-jose) — fixed in code 2026-09-10, **pushed to GitHub but not yet deployed to the VM** (holding per explicit instruction — do not deploy without asking first)
@@ -124,14 +124,14 @@ Service role key is in Supabase dashboard → Settings → API → service_role.
 - **Automated backups**: daily at 3 AM via cron on the VM, dumps `herd_db` and uploads to `gs://herdintel-db-backups` (30-day auto-delete lifecycle rule). Required briefly stopping/restarting the VM once to widen its storage permissions — a one-time cost, already done. Restoring from a backup is still a manual process, not automated.
 - **Dependabot**: repo currently shows 0 open vulnerabilities as of commit `13c969f` (Next.js and `python-jose` patched) — but that fix is only on GitHub, not yet deployed to the VM (see item 8 above).
 
-### Next Priorities (as of 2026-09-12) — in order
+### Next Priorities (as of 2026-09-13) — in order
 
 1. **Deploy the pending security patches to the VM** — fixed in code, waiting on Kalyan's go-ahead (see item 8 above). Small, low-risk, already tested locally.
-2. **Usage tracking** (beta checklist item 5) — the real priority, blocking the pilot NDA's data-handling commitments. Design already sketched in `docs/implementation-plan.md` (tenants/user_profiles/usage_events tables) but unbuilt. **Deliberately pushed behind the admin dashboard** (item 3, below) — an explicit reorder Kalyan chose on 2026-09-12, not drift; see `docs/decisions.md` "[Beta Hardening] Admin dashboard" for the reasoning.
-3. ✅ **Admin dashboard for Kalyan's own use** — done 2026-09-12. Built to the scope below, nothing more:
+2. ✅ **Admin dashboard for Kalyan's own use** — done 2026-09-12. Built to the scope below, nothing more:
    - Built: `/admin` page (list/invite/remove beta users), replacing the manual curl command. Gated to Kalyan's email only (hardcoded, no role/permission system — see `docs/decisions.md`). No link in the app's nav; reached by typing the URL directly, since it's not meant to be discoverable by beta users.
-   - Not built (still correctly deferred): a usage view on this page — that's just displaying item 2's data once it exists, not its own feature.
+   - Not built (still correctly deferred): a usage view on this page — that's just displaying item 3's data, not its own feature.
    - Explicitly rejected (unchanged from original scoping): building live API integrations to Cloudflare/Resend/Supabase/GCP to track subscription/key/domain expirations in one dashboard. Each is a different API with its own auth and data shape, changes rarely (a few times a year), and would be an ongoing maintenance burden disproportionate to the problem. Instead: a simple hand-maintained reference doc (same style as `docs/deployment-and-architecture-guide.md`) listing each dependency, login link, and renewal cadence — a document, not code.
+3. ✅ **Usage tracking** (beta checklist item 5) — done 2026-09-13. Built as a fresh `v2_usage_events` table in Supabase (deliberately isolated from v1's dormant `usage_log` table, per Kalyan's explicit call), logging session start/end, tab views, institution views, AI questions, peer-filter changes, and briefing exports — all server-verified via JWT, never client-claimed. The original `docs/implementation-plan.md` schema (tenants/user_profiles/usage_events) was **not** used — it assumes multi-tenancy that isn't built and isn't planned. See `docs/decisions.md` "[Beta Hardening] Usage tracking" for full reasoning, including why a third-party analytics tool (e.g. PostHog) was considered and rejected in favor of keeping this data fully self-controlled for the pilot NDA's sake.
 4. **New-year HERD data ingestion pipeline** — real, contained build (porting the old `nsf-herd-mvp/scripts/etl/1_download.py`-style NSF scraping logic into this repo's planned `ingestion/` folder, per the original `dlt` architecture plan). No urgency given NSF's ~18-month publishing lag, but needs to exist before the next survey year actually drops — build ahead of that, not in a rush when it happens.
 5. **AI feature toggle** (beta checklist item 6) — smaller, lower urgency than the above.
 

@@ -10,7 +10,7 @@ import SnapshotTab from "@/components/SnapshotTab";
 import PortfolioTab from "@/components/PortfolioTab";
 import FederalTab from "@/components/FederalTab";
 import QaTab from "@/components/QaTab";
-import { getPeers } from "@/lib/api";
+import { getPeers, logEvent, resetUsageSession } from "@/lib/api";
 import { supabase, isAuthConfigured } from "@/lib/supabase";
 import type { InstitutionListItem, PeerFilters, CandidatePoolSize } from "@/lib/types";
 
@@ -36,10 +36,17 @@ export default function Home() {
   const startYear = Math.max(MIN_YEAR, viewYear - timeWindow);
 
   // Redirect to login if auth is configured and user has no session.
+  // Logs session_start once per browser session (covers both a fresh
+  // login and a page reload on an already-persisted session).
   useEffect(() => {
     if (!isAuthConfigured() || !supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) router.push("/login");
+      if (!session) {
+        router.push("/login");
+      } else if (!sessionStorage.getItem("herd_session_start_logged")) {
+        sessionStorage.setItem("herd_session_start_logged", "1");
+        logEvent("session_start");
+      }
     });
   }, [router]);
 
@@ -54,6 +61,9 @@ export default function Home() {
   }, [selected, peerFilters]);
 
   const handleSelect = (inst: InstitutionListItem) => {
+    if (inst.inst_id !== selected?.inst_id) {
+      logEvent("institution_view", { institution: inst.inst_id });
+    }
     setSelected(inst);
     setCustomPeerIds([]);
     setPeerFilters({});
@@ -82,6 +92,8 @@ export default function Home() {
             {isAuthConfigured() && supabase && (
               <button
                 onClick={async () => {
+                  await logEvent("session_end");
+                  resetUsageSession();
                   await supabase!.auth.signOut();
                   router.push("/login");
                 }}
@@ -149,7 +161,14 @@ export default function Home() {
             />
 
             {!customPeerMode && (
-              <PeerFilterPanel filters={peerFilters} onApply={setPeerFilters} poolSize={poolSize} />
+              <PeerFilterPanel
+                filters={peerFilters}
+                onApply={(f) => {
+                  setPeerFilters(f);
+                  logEvent("peer_filter_change", { institution: selected.inst_id, metadata: f });
+                }}
+                poolSize={poolSize}
+              />
             )}
           </div>
         )}
@@ -165,7 +184,10 @@ export default function Home() {
                 {TABS.map((tab) => (
                   <button
                     key={tab}
-                    onClick={() => setActiveTab(tab)}
+                    onClick={() => {
+                      setActiveTab(tab);
+                      logEvent("tab_view", { tab, institution: selected.inst_id });
+                    }}
                     className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
                       activeTab === tab
                         ? "bg-blue-600 text-white shadow-sm"

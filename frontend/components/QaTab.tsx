@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { askQuestion, getSuggestedQuestions } from "@/lib/api";
+import { askQuestion, getSuggestedQuestions, logEvent } from "@/lib/api";
 import type { QaResponse, SuggestedQuestionGroup } from "@/lib/types";
 import Card from "./Card";
 
@@ -42,6 +42,7 @@ export default function QaTab({ instId, institutionName, state, startYear, endYe
     if (!q.trim() || loading) return;
     setLoading(true);
     setQuestion("");
+    logEvent("qa_question", { institution: instId ?? undefined, question: q });
     const entry: HistoryEntry = { question: q };
     setHistory((h) => [...h, entry]);
     try {

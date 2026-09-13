@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getBriefing } from "@/lib/api";
+import { getBriefing, logEvent } from "@/lib/api";
 
 interface Props {
   instId: string;
@@ -262,6 +262,7 @@ export default function BriefingButton({ instId, startYear, endYear, customPeerI
         peerIds: customPeerIds.length ? customPeerIds : undefined,
       });
       await renderPdf(briefing);
+      logEvent("briefing_export", { institution: instId });
     } catch (e) {
       setError(String(e));
     } finally {
