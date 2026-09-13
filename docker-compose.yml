@@ -34,6 +34,26 @@ services:
       postgres:
         condition: service_healthy
 
+  ingestion:
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    volumes:
+      - ./ingestion:/ingestion   # live-mount code — no rebuild needed after edits
+      - ingestion_data:/ingestion/data
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-herd}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-herd_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No restart policy, no long-running process -- run manually, e.g.:
+    #   docker compose run ingestion python pipeline.py --year 2025
+    #   docker compose run ingestion python check_new_year.py
+
   api:
     build:
       context: ./api
@@ -94,3 +114,4 @@ services:
 volumes:
   pgdata:
   caddy_data:
+  ingestion_data:

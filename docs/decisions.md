@@ -468,3 +468,35 @@ First half of "new-year ingestion pipeline + admin visibility into it" (Kalyan's
 
 ### Open questions
 - The ingestion pipeline itself (the thing that will actually populate new rows in `data_loads` going forward) is the next piece -- not built yet.
+
+---
+
+## [Data Pipeline] Ingestion pipeline — 2026-09-13
+
+### What was built
+- A new `ingestion/` service (its own Dockerfile, matching the `dbt` service's build-only pattern -- no long-running process, invoked via `docker compose run`), containing:
+  - `download.py` -- scrapes NSF's HERD microdata page for a given year's ZIP, extracts the CSV. Skips re-downloading if already on disk (same idempotency check as v1).
+  - `transform.py` -- the actual parsing logic (Q1 funding sources -> `raw_institutions`, Q09/Q11 field expenditures -> `raw_field_expenditures`, Q09 agency breakdown -> `raw_agency_funding`), ported from `nsf-herd-mvp/scripts/etl/2_transform.py`, `4_transform_fields.py`, and `5_transform_agencies.py` with the parsing logic itself unchanged -- only reshaped to return a DataFrame for one year instead of writing a combined all-years CSV.
+  - `pipeline.py` -- the orchestrator (`docker compose run ingestion python pipeline.py --year 2025`): download -> transform -> **validate against the same four invariants CLAUDE.md's dbt tests enforce** (total_rd = sum of funding sources; agency sum = federal; parent field = sum of sub-fields; sum of parent fields = total_rd) -> load. A validation failure stops before anything touches the database.
+  - `load.py` -- loads via a full delete+insert for that (table, year), all three tables plus the `data_loads` write in one transaction. Re-running a year cleanly replaces it; any failure rolls back the whole thing, never leaving a half-loaded year.
+  - `check_new_year.py` -- read-only: scrapes NSF's page, compares against `MAX(year)` in `data_loads`, reports whether anything new is available. Never writes anywhere.
+- Tested against the real NSF website for 2024 (already published, already loaded) rather than waiting for a genuinely new year: downloaded the real ZIP, transformed it, all four invariant checks passed, and the load produced byte-identical row counts to what was already in the database (681 institutions, 15,979 field rows, 4,718 agency rows) -- strong evidence the port is faithful to v1's proven logic, not just superficially similar.
+
+### Why
+Beta/roadmap item: "new-year HERD data ingestion pipeline," pulled forward from "no urgency" to now at Kalyan's request, alongside the `data_loads` tracking table built just before this. NSF's ~18-month publish lag means there's no genuinely new year to test against yet, but the pipeline needed to exist and be trustworthy before that happens, not built in a rush when it does.
+
+### Key decisions
+- **Deviated from the original architecture doc's `dlt` plan** -- CLAUDE.md's "Next Priorities" wording says "per the original dlt architecture plan," but `dlt` was never actually adopted anywhere else in this repo (the two existing load scripts, `load_seed_data.py` and `load_classifications.py`, are both plain Python/pandas/psycopg2, no framework). Introducing `dlt` here -- its own state model, schema-evolution machinery, incremental-load semantics -- would add a new dependency and a new mental model for a manually-run, once-a-year, single-file job that's already well understood. Went with plain `pandas` + `psycopg2`, consistent with everything else in this codebase. Revisit if/when Phase 5 (Dagster orchestration) actually gets built and a real multi-source orchestration need emerges.
+- **Manual trigger, not a scheduled cron job** -- discussed explicitly with Kalyan. NSF's publish cadence is infrequent and not on a fixed date, so a cron job would mostly poll and find nothing; the real risk isn't saved effort, it's an unattended job silently failing or partially succeeding when NSF changes their page's HTML (a real possibility over a multi-year horizon) with nobody watching. A bad automated load into data real beta users already rely on is a worse failure mode than running it a few weeks late. The `check_new_year.py` script is the one piece that's safe to run unattended/on a schedule later, since it's read-only.
+- **Full delete+insert per (table, year), not row-level upsert** -- simpler and more robust than an `ON CONFLICT DO UPDATE` with an explicit column list to maintain per table; a year going into production data should be a clean, atomic, all-or-nothing replace, not a row-by-row merge.
+- **Validation runs inside the pipeline itself, before loading** -- not just relying on the next `dbt test` run to catch a bad transform after the fact. Given how much CLAUDE.md emphasizes these four invariants as non-negotiable, catching a violation before it ever reaches Postgres (rather than after, when real users might already be looking at wrong numbers) was worth the extra ~30 lines.
+- **Assumes exactly one relevant CSV per year's ZIP** (`csv_files[0]`) -- same assumption v1 made, unchanged since it's held for all 15 years so far.
+
+### Alternatives rejected
+- Using `dlt` per the original docs -- see above; rejected as a mismatch with the rest of the codebase's style for a job this contained.
+- An automatic/scheduled load -- rejected; see the manual-trigger reasoning above.
+- Row-level `ON CONFLICT DO UPDATE` upserts -- rejected in favor of full per-year replace, for simplicity and atomicity.
+
+### Open questions
+- Not yet tested against a genuinely new (never-before-loaded) year, since none exists yet -- the 2024 re-load is the strongest available proxy, but the true test is whenever NSF actually publishes the next year.
+- `check_new_year.py` is not wired into any schedule/cron yet (VM changes are a separate, explicitly-gated step); Kalyan would need to decide whether/when he wants that automated later.

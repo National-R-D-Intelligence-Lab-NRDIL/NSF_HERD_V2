@@ -112,7 +112,7 @@ Service role key is in Supabase dashboard → Settings → API → service_role.
 8. ✅ Patch security vulnerabilities (Next.js, python-jose) — fixed in code 2026-09-10, **pushed to GitHub but not yet deployed to the VM** (holding per explicit instruction — do not deploy without asking first)
 9. ✅ Automated daily database backups — done 2026-09-10 (see "Domain, Email, Security & Backups" below)
 10. ✅ Admin dashboard for Kalyan (own use only, not pilot-facing) — done 2026-09-12, built ahead of usage tracking (item 5) as a deliberate reorder, see `docs/decisions.md` "[Beta Hardening] Admin dashboard"
-11. ⬜ New-year data ingestion pipeline — not built, no urgency yet (NSF publishes on ~18-month lag), but needed before the next HERD survey year drops
+11. ✅ New-year data ingestion pipeline — done 2026-09-13, see "Next Priorities" #5 below
 
 ### Domain, Email, Security & Backups (as of 2026-09-10)
 - **Domain**: `herdintel.app`, registered via Cloudflare (working brand name — chosen to avoid implying NSF endorsement; a full rebrand may happen later, see `docs/decisions.md`)
@@ -133,7 +133,7 @@ Service role key is in Supabase dashboard → Settings → API → service_role.
    - Explicitly rejected (unchanged from original scoping): building live API integrations to Cloudflare/Resend/Supabase/GCP to track subscription/key/domain expirations in one dashboard. Each is a different API with its own auth and data shape, changes rarely (a few times a year), and would be an ongoing maintenance burden disproportionate to the problem. Instead: a simple hand-maintained reference doc (same style as `docs/deployment-and-architecture-guide.md`) listing each dependency, login link, and renewal cadence — a document, not code.
 3. ✅ **Usage tracking** (beta checklist item 5) — done 2026-09-13. Built as a fresh `v2_usage_events` table in Supabase (deliberately isolated from v1's dormant `usage_log` table, per Kalyan's explicit call), logging session start/end, tab views, institution views, AI questions, peer-filter changes, and briefing exports — all server-verified via JWT, never client-claimed. The original `docs/implementation-plan.md` schema (tenants/user_profiles/usage_events) was **not** used — it assumes multi-tenancy that isn't built and isn't planned. See `docs/decisions.md` "[Beta Hardening] Usage tracking" for full reasoning, including why a third-party analytics tool (e.g. PostHog) was considered and rejected in favor of keeping this data fully self-controlled for the pilot NDA's sake.
 4. ✅ **AI feature toggle** (beta checklist item 6) — done 2026-09-13, built alongside a per-user access expiration date. Both are `user_metadata` flags on the Supabase user (no new table), enforced centrally in `api/auth.py`'s `get_current_user` so every protected endpoint gets expiration checking for free; the AI flag additionally gates `POST /qa/ask` server-side, not just the frontend tab. Managed from the `/admin` page (toggle + date picker per user). See `docs/decisions.md` "[Beta Hardening] AI toggle + access expiration" — including the accepted tradeoff that expiration is checked at login/request time (not a live timer), so an already-open tab can keep working up to ~1 hour after its holder's access lapses.
-5. **New-year HERD data ingestion pipeline** — real, contained build (porting the old `nsf-herd-mvp/scripts/etl/1_download.py`-style NSF scraping logic into this repo's planned `ingestion/` folder, per the original `dlt` architecture plan). No urgency given NSF's ~18-month publishing lag, but needs to exist before the next survey year actually drops — build ahead of that, not in a rush when it happens.
+5. ✅ **New-year HERD data ingestion pipeline** — done 2026-09-13, built alongside the `data_loads` tracking table and admin Data tab (item 2 above). `ingestion/` now exists for real: `docker compose run ingestion python pipeline.py --year YYYY` downloads, transforms, validates against the same four invariants dbt tests enforce, and loads a survey year, all-or-nothing. Tested against the real NSF site for 2024 (already published) since no genuinely new year exists yet — produced byte-identical row counts to what was already loaded. **Deviated from the original `dlt` architecture plan** — used plain pandas/psycopg2 instead, consistent with every other load script in this repo; see `docs/decisions.md` "[Data Pipeline] Ingestion pipeline" for why. Deliberately **not** automated on a schedule — it's a manual command (`check_new_year.py` is the one safe-to-automate, read-only piece) since NSF's unpredictable ~18-month cadence makes an unattended job riskier than useful.
 
 ---
 
@@ -199,10 +199,14 @@ nsf-herd-v2/
 ├── .env.example
 ├── CLAUDE.md                        ← this file
 │
-├── ingestion/
+├── ingestion/                        ← plain pandas/psycopg2, not dlt (see docs/decisions.md)
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── herd_pipeline.py             ← dlt pipeline
+│   ├── download.py                  ← scrapes NSF, downloads one year's ZIP
+│   ├── transform.py                 ← ported parsing logic from v1's ETL scripts
+│   ├── load.py                      ← per-year delete+insert, writes data_loads
+│   ├── pipeline.py                  ← orchestrator + invariant validation, run manually
+│   └── check_new_year.py            ← read-only, safe to automate later
 │
 ├── dbt/
 │   ├── dbt_project.yml
