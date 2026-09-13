@@ -17,6 +17,7 @@ returns a placeholder user so protected endpoints keep working.
 
 import json
 import urllib.request
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -73,4 +74,22 @@ async def get_current_user(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token: missing subject")
 
-    return {"user_id": user_id, "email": payload.get("email", "")}
+    # Optional per-user overrides, set via the admin page and stored in
+    # Supabase's user_metadata (no separate table -- see docs/decisions.md
+    # "[Beta Hardening] AI toggle + access expiration"). Checked here so
+    # every JWT-protected endpoint enforces them for free, in one place.
+    metadata = payload.get("user_metadata") or {}
+    expires_at = metadata.get("access_expires_at")
+    if expires_at:
+        try:
+            expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            if datetime.now(timezone.utc) >= expiry:
+                raise HTTPException(status_code=401, detail="Access expired")
+        except ValueError:
+            pass  # malformed date -- ignore rather than lock everyone out
+
+    return {
+        "user_id": user_id,
+        "email": payload.get("email", ""),
+        "ai_enabled": metadata.get("ai_enabled", True),
+    }

@@ -271,6 +271,23 @@ export async function inviteAdminUser(email: string, redirectTo: string) {
   return res.json();
 }
 
+export async function updateAdminUser(
+  userId: string,
+  updates: { ai_enabled?: boolean; access_expires_at?: string | null }
+) {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+  }
+  return res.json();
+}
+
 export async function removeAdminUser(userId: string) {
   const authHeaders = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/admin/users/${userId}`, {

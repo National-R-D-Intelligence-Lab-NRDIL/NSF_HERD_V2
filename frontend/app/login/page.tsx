@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, isAuthConfigured } from "@/lib/supabase";
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ expired?: string }>;
+}) {
+  const { expired } = use(searchParams);
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "reset">("login");
   const [email, setEmail] = useState("");
@@ -68,6 +73,12 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
+
+        {expired === "1" && (
+          <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Your access has expired. Contact your administrator if you need it renewed.
+          </p>
+        )}
 
         {mode === "login" ? (
           <form onSubmit={handleLogin} className="space-y-4">

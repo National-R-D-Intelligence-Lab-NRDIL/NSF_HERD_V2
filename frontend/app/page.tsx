@@ -30,6 +30,7 @@ export default function Home() {
   const [customPeerIds, setCustomPeerIds] = useState<string[]>([]);
   const [peerFilters, setPeerFilters] = useState<PeerFilters>({});
   const [poolSize, setPoolSize] = useState<CandidatePoolSize | undefined>(undefined);
+  const [aiEnabled, setAiEnabled] = useState(true);
 
   const customPeerMode = customPeerIds.length > 0;
   const endYear = viewYear;
@@ -37,13 +38,25 @@ export default function Home() {
 
   // Redirect to login if auth is configured and user has no session.
   // Logs session_start once per browser session (covers both a fresh
-  // login and a page reload on an already-persisted session).
+  // login and a page reload on an already-persisted session). Also
+  // enforces a per-user access expiration date and AI-feature toggle,
+  // both set via the /admin page and stored in Supabase user_metadata --
+  // see docs/decisions.md "[Beta Hardening] AI toggle + access expiration".
   useEffect(() => {
     if (!isAuthConfigured() || !supabase) return;
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         router.push("/login");
-      } else if (!sessionStorage.getItem("herd_session_start_logged")) {
+        return;
+      }
+      const metadata = session.user.user_metadata ?? {};
+      const expiresAt = metadata.access_expires_at as string | undefined;
+      if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
+        supabase!.auth.signOut().then(() => router.push("/login?expired=1"));
+        return;
+      }
+      setAiEnabled(metadata.ai_enabled !== false);
+      if (!sessionStorage.getItem("herd_session_start_logged")) {
         sessionStorage.setItem("herd_session_start_logged", "1");
         logEvent("session_start");
       }
@@ -181,7 +194,7 @@ export default function Home() {
           <>
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
-                {TABS.map((tab) => (
+                {TABS.filter((tab) => aiEnabled || tab !== "Ask a Question").map((tab) => (
                   <button
                     key={tab}
                     onClick={() => {
@@ -233,7 +246,7 @@ export default function Home() {
                 peerFilters={peerFilters}
               />
             )}
-            {activeTab === "Ask a Question" && (
+            {activeTab === "Ask a Question" && aiEnabled && (
               <QaTab
                 instId={selected.inst_id}
                 institutionName={selected.name}

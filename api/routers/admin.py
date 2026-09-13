@@ -41,6 +41,11 @@ class InviteRequest(BaseModel):
     redirect_to: str
 
 
+class UpdateUserSettingsRequest(BaseModel):
+    ai_enabled: bool | None = None
+    access_expires_at: str | None = None  # ISO date/datetime string, or null to clear
+
+
 @router.get("/users")
 async def list_users(_: dict = Depends(require_admin)):
     url = f"{settings.supabase_url}/auth/v1/admin/users"
@@ -57,6 +62,8 @@ async def list_users(_: dict = Depends(require_admin)):
             "created_at": u.get("created_at"),
             "invited_at": u.get("invited_at"),
             "last_sign_in_at": u.get("last_sign_in_at"),
+            "ai_enabled": (u.get("user_metadata") or {}).get("ai_enabled", True),
+            "access_expires_at": (u.get("user_metadata") or {}).get("access_expires_at"),
         }
         for u in users
     ]
@@ -77,6 +84,32 @@ async def invite_user(payload: InviteRequest, _: dict = Depends(require_admin)):
             params={"redirect_to": payload.redirect_to},
             json={"email": payload.email},
             timeout=10,
+        )
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    return resp.json()
+
+
+@router.patch("/users/{user_id}")
+async def update_user_settings(
+    user_id: str, payload: UpdateUserSettingsRequest, _: dict = Depends(require_admin)
+):
+    # Supabase's admin update replaces user_metadata wholesale rather than
+    # merging it, so fetch the current value first and merge in only the
+    # fields this request explicitly sent (exclude_unset distinguishes
+    # "field omitted" from "field explicitly set to null", e.g. to clear
+    # access_expires_at).
+    url = f"{settings.supabase_url}/auth/v1/admin/users/{user_id}"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=_admin_headers(), timeout=10)
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    current_metadata = resp.json().get("user_metadata") or {}
+    merged_metadata = {**current_metadata, **payload.model_dump(exclude_unset=True)}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.put(
+            url, headers=_admin_headers(), json={"user_metadata": merged_metadata}, timeout=10
         )
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)

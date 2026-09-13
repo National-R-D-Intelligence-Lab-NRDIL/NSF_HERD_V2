@@ -312,4 +312,6 @@ export interface AdminUser {
   created_at: string | null;
   invited_at: string | null;
   last_sign_in_at: string | null;
+  ai_enabled: boolean;
+  access_expires_at: string | null;
 }

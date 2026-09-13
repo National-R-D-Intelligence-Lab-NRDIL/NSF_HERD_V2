@@ -416,4 +416,35 @@ While testing, `/usage/log` calls silently never left the browser (not even a CO
 
 ### Open questions
 - Whether Kalyan wants a lightweight weekly report/view over this data, or will keep querying it ad hoc in the Supabase table editor as needed -- not built either way; deliberately out of scope for this change (see the admin-dashboard entry's note that a usage view is "just displaying this data once it exists, not its own feature").
-- The email-template spam fix (drafted copy, not yet applied) and the AI feature toggle (beta checklist item 6) remain open, in that order.
+- The email-template spam fix (drafted copy, not yet applied) remains open.
+
+---
+
+## [Beta Hardening] AI toggle + access expiration — 2026-09-13
+
+### What was built
+- Two per-user settings, both stored in Supabase's `user_metadata` (no new table): `ai_enabled` (bool, default true) and `access_expires_at` (ISO datetime, or absent = no expiration).
+- `api/auth.py`'s `get_current_user` -- the single JWT-verification dependency already used by every protected endpoint -- now reads both fields out of the token's `user_metadata` claim: it rejects the request (401) if `access_expires_at` has passed, and it returns `ai_enabled` in the user dict for callers to check. This means expiration enforcement and the AI flag are available everywhere for free, with no per-router duplication.
+- `POST /qa/ask` (`api/routers/qa.py`) now returns 403 if `ai_enabled` is false -- server-side enforcement of the toggle, not just hiding the button.
+- `frontend/app/page.tsx`: reads `session.user.user_metadata` on load. If `access_expires_at` has passed, signs the user out and redirects to `/login?expired=1` (which shows a plain "Your access has expired" message). Otherwise sets `aiEnabled` from the flag and filters "Ask a Question" out of the tab bar (and skips mounting `QaTab`) when it's false.
+- `/admin` page: two new columns per user -- a toggle switch for `ai_enabled`, and a date input (plus a "Clear" link) for `access_expires_at`. Both call a new `PATCH /admin/users/{id}` endpoint (`api/routers/admin.py`), which fetches the user's current metadata, merges in only the field(s) the request explicitly sent, and writes it back -- Supabase's admin update replaces `user_metadata` wholesale rather than merging, so the merge has to happen on this side or one setting would silently clobber the other.
+- Expired users get a small red "Expired" badge next to their email in the admin table.
+
+### Why
+Beta checklist item 6 (AI toggle), plus a new ask from Kalyan: sharing time-limited trial access (e.g. "you have this for a week") without having to remember to manually revoke it. Both share the same underlying mechanism (a per-user metadata flag, checked at the same JWT-verification choke point), so building them together was more efficient than two separate passes.
+
+### Key decisions
+- **`user_metadata`, not a new table** -- same reasoning as the admin dashboard's hardcoded-email-allowlist decision: this is a handful of settings for ~10 users, not a system that needs its own schema, migration, and query layer.
+- **Enforcement point is `get_current_user`, not scattered per-endpoint checks** -- expiration is checked once, centrally, and automatically covers every current and future endpoint that depends on that dependency. `ai_enabled` is returned from the same place but only actually enforced in `/qa/ask` today, since that's the literal "Ask a Question" feature; not applied to `/briefing` or `/insight` since neither was named in the original ask and both predate this feature.
+- **Expiration is checked at login/request time, not on a live timer** -- explicitly discussed and accepted with Kalyan upfront: a browser tab already open at the moment access lapses can keep working for up to about an hour (until its token naturally refreshes), since the check reads whatever `user_metadata` was baked into the currently-held JWT. A page reload or fresh login is blocked immediately. This is a convenience feature for managing shared/trial access, not a hard security boundary, and that tradeoff was made knowingly rather than discovered as a bug.
+- **PATCH endpoint fetches-then-merges metadata server-side** rather than trusting the frontend to send a complete object -- avoids a race where setting one field (say, the expiration date) accidentally wipes out the other (the AI flag) because Supabase's admin API replaces `user_metadata` wholesale instead of merging it.
+
+### Alternatives rejected
+- A live/continuous expiration check (e.g. polling, websocket, or a scheduled job to force sign-outs) -- rejected as disproportionate engineering for a beta-scale convenience feature; the request/login-time check is simple and matches how auth already works everywhere else in this app.
+- Enforcing `ai_enabled` across every LLM-touching endpoint (briefing, insight) rather than just `/qa/ask` -- rejected as scope creep beyond what was actually asked ("show/hide the Ask a Question tab"); revisit if Kalyan wants the toggle to be a broader "cost control" switch later.
+
+### Verification note
+Tested end-to-end in the browser, including forcing a live token refresh (via Supabase's `/auth/v1/token?grant_type=refresh_token` endpoint directly, since the app doesn't expose its Supabase client globally) to confirm the "Ask a Question" tab actually disappears once a fresh JWT carries `ai_enabled: false` -- not just that the toggle persists in the database. Confirms the ~1-hour lag caveat above is real and expected, not a bug: an already-cached token doesn't see the change until it's refreshed.
+
+### Open questions
+- The email-template spam fix (drafted copy, not yet applied) remains open; no other beta-checklist items are currently open besides the VM security-patch deploy (blocked on Kalyan's go-ahead) and the new-year ingestion pipeline (no urgency).

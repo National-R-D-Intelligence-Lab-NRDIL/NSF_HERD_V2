@@ -395,6 +395,9 @@ async def _execute_sql(sql: str):
 
 @router.post("/ask")
 async def ask(request: QARequest, user: dict = Depends(get_current_user)):
+    if not user.get("ai_enabled", True):
+        raise HTTPException(status_code=403, detail="AI feature disabled for this account")
+
     context_block = _build_context_block(request)
 
     prompt = f"""You are an expert SQL analyst for the NSF HERD (Higher Education Research & Development) database.
