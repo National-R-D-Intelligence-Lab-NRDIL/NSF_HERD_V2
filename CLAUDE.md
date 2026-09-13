@@ -87,14 +87,18 @@ Using Google Cloud Platform (GCP) with $300 free credit (~6 months of runway). T
 - Supabase project ref: `qnlxfrcajoxjqvckysyt`
 - First beta user invited: `kalyan8358@gmail.com`
 
-**To invite a new beta user** (run from local machine with service role key):
+**Preferred way to invite/remove a beta user**: the admin page at `/admin` (see "Next Priorities" #3 below) — not this manual command. Kept here only as a fallback if the admin page is ever unavailable.
+
+**Manual fallback** (run from local machine with service role key):
 ```bash
-curl -X POST "https://qnlxfrcajoxjqvckysyt.supabase.co/auth/v1/invite" \
+curl -X POST "https://qnlxfrcajoxjqvckysyt.supabase.co/auth/v1/invite?redirect_to=http://34.174.156.116:3000/reset-password" \
   -H "apikey: SERVICE_ROLE_KEY" \
   -H "Authorization: Bearer SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"email": "user@university.edu", "redirect_to": "http://34.174.156.116:3000/reset-password"}'
+  -d '{"email": "user@university.edu"}'
 ```
+`redirect_to` must be a query parameter, not a JSON body field — Supabase's invite endpoint silently ignores it as a body field and falls back to the project's default Site URL, which sends invitees to login instead of the password-setup page. (This was a real bug caught while building the admin page — see `docs/decisions.md`.)
+
 Service role key is in Supabase dashboard → Settings → API → service_role. Do not commit it.
 
 ### Remaining for Beta Launch (in order)
@@ -107,7 +111,7 @@ Service role key is in Supabase dashboard → Settings → API → service_role.
 7. ✅ Make GitHub repo private again — confirmed done
 8. ✅ Patch security vulnerabilities (Next.js, python-jose) — fixed in code 2026-09-10, **pushed to GitHub but not yet deployed to the VM** (holding per explicit instruction — do not deploy without asking first)
 9. ✅ Automated daily database backups — done 2026-09-10 (see "Domain, Email, Security & Backups" below)
-10. ⬜ Admin dashboard for Kalyan (own use only, not pilot-facing) — scoped but not built, see "Next Priorities" below
+10. ✅ Admin dashboard for Kalyan (own use only, not pilot-facing) — done 2026-09-12, built ahead of usage tracking (item 5) as a deliberate reorder, see `docs/decisions.md` "[Beta Hardening] Admin dashboard"
 11. ⬜ New-year data ingestion pipeline — not built, no urgency yet (NSF publishes on ~18-month lag), but needed before the next HERD survey year drops
 
 ### Domain, Email, Security & Backups (as of 2026-09-10)
@@ -120,14 +124,14 @@ Service role key is in Supabase dashboard → Settings → API → service_role.
 - **Automated backups**: daily at 3 AM via cron on the VM, dumps `herd_db` and uploads to `gs://herdintel-db-backups` (30-day auto-delete lifecycle rule). Required briefly stopping/restarting the VM once to widen its storage permissions — a one-time cost, already done. Restoring from a backup is still a manual process, not automated.
 - **Dependabot**: repo currently shows 0 open vulnerabilities as of commit `13c969f` (Next.js and `python-jose` patched) — but that fix is only on GitHub, not yet deployed to the VM (see item 8 above).
 
-### Next Priorities (as of 2026-09-10) — in order
+### Next Priorities (as of 2026-09-12) — in order
 
 1. **Deploy the pending security patches to the VM** — fixed in code, waiting on Kalyan's go-ahead (see item 8 above). Small, low-risk, already tested locally.
-2. **Usage tracking** (beta checklist item 5) — the real priority. Blocks honoring the pilot NDA's data-handling commitments. Design already sketched in `docs/implementation-plan.md` (tenants/user_profiles/usage_events tables) but unbuilt.
-3. **Admin dashboard for Kalyan's own use** — scoped down deliberately, do not over-build this:
-   - **Worth building**: a simple internal page wrapping the Supabase admin API calls Kalyan already runs manually (add/remove users, manage seats). Small, contained.
-   - **Not separate work**: a usage view on the same page — this is just displaying item 2's data once it exists, not its own feature.
-   - **Explicitly rejected**: building live API integrations to Cloudflare/Resend/Supabase/GCP to track subscription/key/domain expirations in one dashboard. Each is a different API with its own auth and data shape, changes rarely (a few times a year), and would be an ongoing maintenance burden disproportionate to the problem. Instead: a simple hand-maintained reference doc (same style as `docs/deployment-and-architecture-guide.md`) listing each dependency, login link, and renewal cadence — a document, not code.
+2. **Usage tracking** (beta checklist item 5) — the real priority, blocking the pilot NDA's data-handling commitments. Design already sketched in `docs/implementation-plan.md` (tenants/user_profiles/usage_events tables) but unbuilt. **Deliberately pushed behind the admin dashboard** (item 3, below) — an explicit reorder Kalyan chose on 2026-09-12, not drift; see `docs/decisions.md` "[Beta Hardening] Admin dashboard" for the reasoning.
+3. ✅ **Admin dashboard for Kalyan's own use** — done 2026-09-12. Built to the scope below, nothing more:
+   - Built: `/admin` page (list/invite/remove beta users), replacing the manual curl command. Gated to Kalyan's email only (hardcoded, no role/permission system — see `docs/decisions.md`). No link in the app's nav; reached by typing the URL directly, since it's not meant to be discoverable by beta users.
+   - Not built (still correctly deferred): a usage view on this page — that's just displaying item 2's data once it exists, not its own feature.
+   - Explicitly rejected (unchanged from original scoping): building live API integrations to Cloudflare/Resend/Supabase/GCP to track subscription/key/domain expirations in one dashboard. Each is a different API with its own auth and data shape, changes rarely (a few times a year), and would be an ongoing maintenance burden disproportionate to the problem. Instead: a simple hand-maintained reference doc (same style as `docs/deployment-and-architecture-guide.md`) listing each dependency, login link, and renewal cadence — a document, not code.
 4. **New-year HERD data ingestion pipeline** — real, contained build (porting the old `nsf-herd-mvp/scripts/etl/1_download.py`-style NSF scraping logic into this repo's planned `ingestion/` folder, per the original `dlt` architecture plan). No urgency given NSF's ~18-month publishing lag, but needs to exist before the next survey year actually drops — build ahead of that, not in a rush when it happens.
 5. **AI feature toggle** (beta checklist item 6) — smaller, lower urgency than the above.
 

@@ -305,3 +305,11 @@ export interface BriefingResponse {
   peer_table: BriefingPeerRow[];
   rank_trend: BriefingRankPoint[];
 }
+
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  created_at: string | null;
+  invited_at: string | null;
+  last_sign_in_at: string | null;
+}

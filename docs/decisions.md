@@ -355,3 +355,34 @@ Beta launch checklist item #4 ("update Supabase redirect URLs to use GCP IP inst
 ### Open questions
 - Custom domain + TLS (Let's Encrypt or Cloudflare proxy) not yet set up — needed before the app can be considered to have a durable public link independent of hosting provider, and before password-reset links stop traveling over plain HTTP. Revisit before opening beta beyond the initial ~10 invited users.
 - Beta checklist items #5 (usage tracking) and #6 (AI feature toggle) still open.
+
+---
+
+## [Beta Hardening] Admin dashboard — 2026-09-12
+
+### What was built
+- New `/admin` page in the frontend (list beta users, invite a new one, remove one) backed by a new `api/routers/admin.py` FastAPI router. Both wrap Supabase's Admin API (`/auth/v1/admin/users`, `/auth/v1/invite`) — the same actions Kalyan was previously running by hand via curl (see CLAUDE.md "Auth — Completed").
+- New server-side-only secret: `SUPABASE_SERVICE_ROLE_KEY`, added to `api/config.py`, `.env.example`, and the `api` service's environment in `docker-compose.yml` (deliberately *not* added to the `frontend` service or as a build arg — it must never reach the browser bundle).
+- Access gate: a hardcoded email allow-list (`ADMIN_EMAILS = {"kalyan8358@gmail.com"}` in `admin.py`) checked via a `require_admin` FastAPI dependency layered on top of the existing `get_current_user` JWT check. No visible "Admin" link anywhere in the app's navigation — the page is reached only by typing the URL directly.
+- Added `httpx` as a new API dependency to make these calls asynchronously (the existing JWKS fetch in `auth.py` uses blocking `urllib.request`, but that only runs once at startup — doing the same inside a per-request handler would violate the project's "no blocking operations in API handlers" rule).
+
+### Why
+Beta checklist / Next Priorities item 3. Kalyan was manually constructing curl commands with a highly-privileged secret every time he needed to invite or remove a beta user — small friction, but also meant the service-role key lived only in his terminal history with no app-level guardrail.
+
+### Key decisions
+- **Reordered ahead of usage tracking (item 2)** — a deliberate, explicit choice Kalyan made when asked (previously usage tracking was "the real priority" since it blocks the pilot NDA's data-handling commitments). Logged here per CLAUDE.md's process rule that reordering must be a deliberate, documented call, not silent drift. Usage tracking remains next after this.
+- **Hardcoded email allow-list instead of a role/permission system** — the `user_profiles`/`role` table sketched in `docs/implementation-plan.md` was never built and isn't needed for a single-operator tool. Avoids adding a database table and a migration for a value that's realistically just "Kalyan" today. Trivial to extend (add another email to the set) if a second admin is ever needed.
+- **No nav link, URL-only** — confirmed with Kalyan this is the standard pattern for an internal admin panel bolted onto a customer-facing app: the backend gate is what actually matters for security, so a visible link would only add UI surface with no security benefit, and could confuse beta users who'd see a link they can't use.
+- **`httpx` added as a new dependency** rather than reusing `urllib.request` — the existing blocking call in `auth.py` is safe only because it runs once at startup, not per-request.
+
+### Bug found and fixed
+While testing the invite flow end-to-end (not just trusting that it matched the old manual curl command), discovered that Supabase's `/auth/v1/invite` endpoint expects `redirect_to` as a **query parameter**, not a JSON body field. The manual curl command documented in CLAUDE.md (used for all prior beta invites) had it in the body the whole time, where Supabase silently ignores it and falls back to the project's default Site URL — meaning invitees landed on login instead of the password-setup page (`/reset-password`). Fixed in `admin.py` (query param) and corrected the documented manual fallback command in CLAUDE.md to match. Not yet investigated whether any previously-invited real beta users were actually affected by this before today.
+
+### Alternatives rejected
+- Building the `user_profiles`/`role`/multi-tenant system from `docs/implementation-plan.md` now, to have a "proper" admin permission model — rejected as overkill for a single admin; explicitly flagged as such when scoping this with Kalyan.
+- A visible admin link, shown/hidden client-side based on the logged-in user's email — rejected in favor of URL-only access; no real security difference since the API gate is server-side either way, but adds a UI element other users would (harmlessly but pointlessly) run into.
+
+### Open questions
+- Beta invite emails (the current stock Supabase "You have been invited" template) are landing in Gmail spam — most likely because the unmodified default template text is a known pattern flagged across many unrelated Supabase projects, not primarily a `herdintel.app` domain-reputation issue. Drafted replacement subject/body copy for Kalyan to paste into Supabase Dashboard → Authentication → Email Templates; not yet applied (Supabase dashboard config, outside this repo, must be done by Kalyan). Revisit whether Reset Password and other templates need the same treatment.
+- Whether any of the 4 real beta users invited before this fix (all showing successful past sign-ins) were actually affected by the redirect_to bug is unconfirmed — not investigated as part of this change.
+- Usage tracking (item 2) is next.

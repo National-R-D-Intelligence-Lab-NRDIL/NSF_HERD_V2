@@ -25,6 +25,7 @@ import type {
   ClassificationOptions,
   PeerFilters,
   BriefingResponse,
+  AdminUser,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -251,4 +252,34 @@ export async function askQuestion(payload: {
     throw new Error(`${res.status} ${res.statusText}: ${detail}`);
   }
   return res.json() as Promise<QaResponse>;
+}
+
+// --- admin (Kalyan's internal use only, not pilot-facing) ---
+export const listAdminUsers = () => getJsonAuth<AdminUser[]>(`/admin/users`);
+
+export async function inviteAdminUser(email: string, redirectTo: string) {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/admin/users/invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders },
+    body: JSON.stringify({ email, redirect_to: redirectTo }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+  }
+  return res.json();
+}
+
+export async function removeAdminUser(userId: string) {
+  const authHeaders = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/admin/users/${userId}`, {
+    method: "DELETE",
+    headers: authHeaders,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
+  }
+  return res.json();
 }

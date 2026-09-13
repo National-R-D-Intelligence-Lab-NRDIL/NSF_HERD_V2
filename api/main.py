@@ -7,7 +7,7 @@ import db
 from auth import fetch_jwks
 from config import settings
 from services.benchmarker import AutoBenchmarker, fetch_university_features, fetch_classifications
-from routers import institutions, peers, portfolio, federal, qa, classifications, briefing
+from routers import institutions, peers, portfolio, federal, qa, classifications, briefing, admin
 
 
 @asynccontextmanager
@@ -48,6 +48,7 @@ app.include_router(federal.router)
 app.include_router(qa.router)
 app.include_router(classifications.router)
 app.include_router(briefing.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")
