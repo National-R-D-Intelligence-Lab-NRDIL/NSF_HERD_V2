@@ -156,11 +156,16 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
+# NOTE: this file only governs `supabase start` (local dev). The hosted project
+# (qnlxfrcajoxjqvckysyt) is configured separately in the Dashboard under
+# Authentication > URL Configuration, where Site URL is set to the GCP static IP
+# (http://34.174.156.116:3000) instead of localhost — see docs/decisions.md.
 site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000", "http://localhost:3000/reset-password", "http://127.0.0.1:3000/reset-password"]
+# Mirrors the hosted project's Redirect URLs allow-list (local entries + GCP prod entries).
+additional_redirect_urls = ["https://127.0.0.1:3000", "http://localhost:3000/reset-password", "http://127.0.0.1:3000/reset-password", "http://34.174.156.116:3000", "http://34.174.156.116:3000/reset-password"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.

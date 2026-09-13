@@ -327,3 +327,31 @@ A routine "fix `NEXT_PUBLIC_API_URL`" task (the frontend was hardcoded to `local
 - No CI/health-check yet catches "frontend is silently serving a stale/wrong bundle" class of bug automatically (Phase 6, GitHub Actions CI, is still not started); today's diagnosis was entirely manual (inspecting served JS chunks). Worth a lightweight smoke test post-deploy once Phase 6 is picked up.
 - Single-VM deployment (no redundancy, no TLS, no zero-downtime deploys) remains a deliberate scope choice for a ~10-user invite-only beta, not an oversight — revisit if/when usage or user count grows past what a single VM comfortably serves.
 - No automated tests yet for the new `key_metrics`/`peer_table`/`rank_trend` fields — verified manually via `curl` against `inst_id=003594` after `docker compose restart api`, and `tsc --noEmit` passes clean on the frontend.
+
+---
+
+## [Phase 8] GCP static IP + Supabase redirect URLs — 2026-08-03
+
+### What was built
+- Reserved the VM's external IP (`34.174.156.116`) as a static GCP address (`nsf-herd-server-ip`, region `us-south1`), promoted from the ephemeral IP it had been running on.
+- Updated the hosted Supabase project's (`qnlxfrcajoxjqvckysyt`) Authentication → URL Configuration:
+  - Site URL changed from `http://127.0.0.1:3000` to `http://34.174.156.116:3000`
+  - Added `http://34.174.156.116:3000/reset-password` to the Redirect URLs allow-list (the bare `:3000` entry already present didn't cover the exact `/reset-password` path the frontend requests via `${window.location.origin}/reset-password`)
+  - Existing `localhost`/`127.0.0.1` entries kept as-is for local dev
+- Mirrored the same GCP entries into local `supabase/config.toml`'s `additional_redirect_urls`, with a comment clarifying that file only governs `supabase start` (local) — the hosted project's auth config is managed directly in the Dashboard, not pushed from this file.
+
+### Why
+Beta launch checklist item #4 ("update Supabase redirect URLs to use GCP IP instead of localhost"). Discovered along the way that the VM's external IP was ephemeral (`gcloud compute addresses list` showed nothing reserved) — an unplanned VM stop/restart could have reassigned it, silently breaking password-reset/invite email links, the frontend's baked-in API URL, and any bookmarked links, right as real beta users start receiving those emails.
+
+### Key decisions
+- **Reserve a static IP now rather than defer** — cheap (no cost while attached to a running VM) and prevents having to redo this exact Supabase config a second time after a future restart.
+- **GCP IP now, custom domain deferred** — discussed switching to a domain + HTTPS (the only approach that survives a *provider* migration, e.g. GCP → Railway, since a static IP only survives restarts on the same provider) and also fixes sending password-reset links over plain HTTP. Explicitly deferred to keep today's scope to the beta-launch checklist item; revisit before broader/public rollout.
+- **`supabase/config.toml` kept local-dev-only** — `site_url` stays `127.0.0.1` so local dev is unaffected; only `additional_redirect_urls` gained the GCP entries, for documentation parity with the Dashboard rather than as a config that gets pushed.
+
+### Alternatives rejected
+- Leaving the IP ephemeral and just configuring Supabase against the current value — rejected; would have silently broken on the next VM restart with no warning.
+- Domain + HTTPS now — rejected for this pass as bigger scope than the checklist item; tracked as an open question below.
+
+### Open questions
+- Custom domain + TLS (Let's Encrypt or Cloudflare proxy) not yet set up — needed before the app can be considered to have a durable public link independent of hosting provider, and before password-reset links stop traveling over plain HTTP. Revisit before opening beta beyond the initial ~10 invited users.
+- Beta checklist items #5 (usage tracking) and #6 (AI feature toggle) still open.

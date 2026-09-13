@@ -11,6 +11,30 @@ The current app tells VPRs where they are. This version tells them where to go.
 
 ---
 
+## Working With Kalyan — Communication & Process Rules
+
+Kalyan is not a developer. These rules apply to every session, every change, no matter how small it seems:
+
+**After every meaningful change**, explain it in plain English using this structure — don't skip it, don't wait to be asked:
+- **What changed** — plain description, no jargon
+- **Why it was needed** — the problem or goal
+- **How it works** — high-level, with a simple example/flow if helpful
+- **What this means for the user** — what's different for Kalyan now
+- **Where it fits** — which part of the system, how it connects to the rest
+- **What is still not done** — separate implemented vs. missing/planned
+
+Explain technical terms in plain English the first time they come up. Focus on the big picture and reasoning, not line-by-line code — don't overwhelm with implementation detail unless asked. For larger changes, explain the intended approach *before* implementing, so the plan is understood ahead of time. Always flag risks, limitations, side effects, or anything that could affect existing functionality.
+
+**Deploy workflow — never skip steps or auto-continue**:
+1. Make the change locally, test it (`docker compose up`, dev mode)
+2. Push to GitHub
+3. **Stop. Wait for explicit confirmation before touching the GCP VM in any way** — even if a full local→git→VM pipeline was discussed as the general plan, treat "push it" as scoped to the git step only, never assume it authorizes the VM step too
+4. Only once told to proceed: pull on the VM, rebuild, verify
+
+This project's full architecture, deploy mechanics, and safe-change checklist are written up in `docs/deployment-and-architecture-guide.md` — read it before making infrastructure changes. `docs/learning.md` covers the Docker/dbt/FastAPI/frontend internals in the same plain-language style.
+
+---
+
 ## Current Context (as of 2026-08-02)
 
 ### Licensing & Commercial Status
@@ -77,10 +101,35 @@ Service role key is in Supabase dashboard → Settings → API → service_role.
 1. ✅ Auth lockdown (invite-only, password reset, sign-out)
 2. ✅ GCP deployment (VM running, app built)
 3. ✅ Load database onto GCP VM (pg_dump local → restore on VM) — done 2026-08-03
-4. ⬜ Update Supabase redirect URLs to use GCP IP instead of localhost
-5. ⬜ Build usage tracking (page visits, Q&A questions → Postgres table)
+4. ✅ Update Supabase redirect URLs to use GCP IP instead of localhost — done 2026-08-03 (also reserved the VM's IP as static; see `docs/decisions.md` "[Phase 8] GCP static IP + Supabase redirect URLs")
+5. ⬜ Build usage tracking (page visits, Q&A questions → Postgres table) — **next real priority**, blocking the pilot NDA's data-handling commitments (aggregate reporting, retention, deletion)
 6. ⬜ Build AI feature toggle (per-user flag to show/hide Ask tab)
-7. ⬜ Make GitHub repo private again
+7. ✅ Make GitHub repo private again — confirmed done
+8. ✅ Patch security vulnerabilities (Next.js, python-jose) — fixed in code 2026-09-10, **pushed to GitHub but not yet deployed to the VM** (holding per explicit instruction — do not deploy without asking first)
+9. ✅ Automated daily database backups — done 2026-09-10 (see "Domain, Email, Security & Backups" below)
+10. ⬜ Admin dashboard for Kalyan (own use only, not pilot-facing) — scoped but not built, see "Next Priorities" below
+11. ⬜ New-year data ingestion pipeline — not built, no urgency yet (NSF publishes on ~18-month lag), but needed before the next HERD survey year drops
+
+### Domain, Email, Security & Backups (as of 2026-09-10)
+- **Domain**: `herdintel.app`, registered via Cloudflare (working brand name — chosen to avoid implying NSF endorsement; a full rebrand may happen later, see `docs/decisions.md`)
+- **Landing page**: static page at the root domain (`https://herdintel.app`), hosted on Cloudflare (Workers with static assets — the current name for what used to be "Cloudflare Pages"), source in `landing/index.html`
+- **The actual app** is reachable at `https://app.herdintel.app` (frontend) and `https://api.herdintel.app` (API) — routed through a new `caddy` reverse-proxy container (see `Caddyfile`, added to `docker-compose.yml`) that terminates HTTPS since Cloudflare is set to "Full" SSL mode. The old raw-IP addresses (`34.174.156.116:3000`/`:8000`) still work too — nothing has been retired yet.
+- **Email sending** (Supabase invite/password-reset emails) goes through **Resend** via custom SMTP, sending from `herdintel.app` — needed because Supabase's default mailer caps at 2 emails/hour on any plan. SPF, DKIM, and DMARC (`p=none`) are all configured and verified.
+- **Auth method decision**: staying with password + self-service reset (not building OTP-per-login) — Outlook/Microsoft 365's spam filtering was quarantining automated login emails from the brand-new domain, undermining the reliability OTP-per-login would need. Password only needs occasional email delivery, not one per login, so it's more resilient to this. Revisit if this becomes a real problem.
+- **GCP VM now has a working git credential helper** (`credential.helper store`, using a token from `.env`) — `git pull` on the VM no longer requires anyone typing a token by hand.
+- **Automated backups**: daily at 3 AM via cron on the VM, dumps `herd_db` and uploads to `gs://herdintel-db-backups` (30-day auto-delete lifecycle rule). Required briefly stopping/restarting the VM once to widen its storage permissions — a one-time cost, already done. Restoring from a backup is still a manual process, not automated.
+- **Dependabot**: repo currently shows 0 open vulnerabilities as of commit `13c969f` (Next.js and `python-jose` patched) — but that fix is only on GitHub, not yet deployed to the VM (see item 8 above).
+
+### Next Priorities (as of 2026-09-10) — in order
+
+1. **Deploy the pending security patches to the VM** — fixed in code, waiting on Kalyan's go-ahead (see item 8 above). Small, low-risk, already tested locally.
+2. **Usage tracking** (beta checklist item 5) — the real priority. Blocks honoring the pilot NDA's data-handling commitments. Design already sketched in `docs/implementation-plan.md` (tenants/user_profiles/usage_events tables) but unbuilt.
+3. **Admin dashboard for Kalyan's own use** — scoped down deliberately, do not over-build this:
+   - **Worth building**: a simple internal page wrapping the Supabase admin API calls Kalyan already runs manually (add/remove users, manage seats). Small, contained.
+   - **Not separate work**: a usage view on the same page — this is just displaying item 2's data once it exists, not its own feature.
+   - **Explicitly rejected**: building live API integrations to Cloudflare/Resend/Supabase/GCP to track subscription/key/domain expirations in one dashboard. Each is a different API with its own auth and data shape, changes rarely (a few times a year), and would be an ongoing maintenance burden disproportionate to the problem. Instead: a simple hand-maintained reference doc (same style as `docs/deployment-and-architecture-guide.md`) listing each dependency, login link, and renewal cadence — a document, not code.
+4. **New-year HERD data ingestion pipeline** — real, contained build (porting the old `nsf-herd-mvp/scripts/etl/1_download.py`-style NSF scraping logic into this repo's planned `ingestion/` folder, per the original `dlt` architecture plan). No urgency given NSF's ~18-month publishing lag, but needs to exist before the next survey year actually drops — build ahead of that, not in a rush when it happens.
+5. **AI feature toggle** (beta checklist item 6) — smaller, lower urgency than the above.
 
 ---
 
