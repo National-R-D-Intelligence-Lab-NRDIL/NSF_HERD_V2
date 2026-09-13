@@ -26,6 +26,7 @@ import type {
   PeerFilters,
   BriefingResponse,
   AdminUser,
+  DataStatusResponse,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -256,6 +257,8 @@ export async function askQuestion(payload: {
 
 // --- admin (Kalyan's internal use only, not pilot-facing) ---
 export const listAdminUsers = () => getJsonAuth<AdminUser[]>(`/admin/users`);
+
+export const getDataStatus = () => getJsonAuth<DataStatusResponse>(`/admin/data-status`);
 
 export async function inviteAdminUser(email: string, redirectTo: string) {
   const authHeaders = await getAuthHeaders();

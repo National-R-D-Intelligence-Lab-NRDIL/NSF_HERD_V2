@@ -448,3 +448,23 @@ Tested end-to-end in the browser, including forcing a live token refresh (via Su
 
 ### Open questions
 - The email-template spam fix (drafted copy, not yet applied) remains open; no other beta-checklist items are currently open besides the VM security-patch deploy (blocked on Kalyan's go-ahead) and the new-year ingestion pipeline (no urgency).
+
+---
+
+## [Data Pipeline] Data-load tracking table + admin Data tab — 2026-09-13
+
+### What was built
+- New `data_loads` table (`scripts/seed.sql`): one row per HERD survey year, with `loaded_at`, `source`, and a `row_counts` JSONB snapshot per raw table. Nothing tracked this before -- backfilled all 15 existing years (2010-2024) with `loaded_at = NULL` and `source = 'v1 migration (pre-tracking)'` rather than inventing a date, since the real load happened as a one-time SQLite copy with no record of when.
+- `GET /admin/data-status` (`api/routers/admin.py`): reads `data_loads`, also computes `gap_years` (missing years within the loaded range) so a broken/incomplete load is visible without someone eyeballing the list.
+- Split `/admin` into two tabs (`frontend/app/admin/page.tsx` is now a thin shell): the existing user-management UI moved into `frontend/components/AdminUsersTab.tsx` unchanged, and a new `frontend/components/AdminDataTab.tsx` renders the year/loaded/source/row-count table.
+
+### Why
+First half of "new-year ingestion pipeline + admin visibility into it" (Kalyan's ask). This piece stands alone and is useful immediately, independent of the pipeline itself being built -- it's also what the pipeline will write into once it exists.
+
+### Key decisions
+- **Applied the schema change to the running local Postgres by hand** (`docker compose exec postgres psql ... < scripts/seed.sql`) in addition to adding it to `seed.sql` -- the existing `pgdata` volume means `seed.sql` only auto-runs on a fresh volume, per the project's documented pattern for schema changes on a live database (see `docs/implementation-plan.md`'s "Cross-cutting notes"). The same manual step will be needed on the VM whenever this gets deployed there.
+- **No fabricated backfill timestamp** -- `loaded_at` is genuinely `NULL` for all pre-tracking years rather than guessing a date, with the UI showing "Unknown (pre-tracking)" instead of a misleading value.
+- **A separate small table, not new columns on the raw tables** -- keeps `data_loads` decoupled from `raw_institutions`/`raw_field_expenditures`/`raw_agency_funding`, whose schemas dbt models and tests already depend on precisely; adding tracking columns there would have touched code well outside this feature's scope.
+
+### Open questions
+- The ingestion pipeline itself (the thing that will actually populate new rows in `data_loads` going forward) is the next piece -- not built yet.

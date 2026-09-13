@@ -315,3 +315,16 @@ export interface AdminUser {
   ai_enabled: boolean;
   access_expires_at: string | null;
 }
+
+export interface DataLoadYear {
+  year: number;
+  loaded_at: string | null;
+  source: string;
+  row_counts: Record<string, number> | null;
+  notes: string | null;
+}
+
+export interface DataStatusResponse {
+  years: DataLoadYear[];
+  gap_years: number[];
+}

@@ -10,12 +10,15 @@ is gated to a small hardcoded allow-list rather than a database-backed
 permission -- this is a single-operator tool, not a multi-admin feature.
 """
 
+import json
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from auth import get_current_user
 from config import settings
+from db import get_pool, rows_to_dicts
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -124,3 +127,24 @@ async def remove_user(user_id: str, _: dict = Depends(require_admin)):
     if resp.status_code >= 400:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
     return {"status": "deleted"}
+
+
+@router.get("/data-status")
+async def data_status(_: dict = Depends(require_admin)):
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT year, loaded_at, source, row_counts, notes FROM data_loads ORDER BY year DESC"
+        )
+    years = rows_to_dicts(rows)
+    for y in years:
+        # asyncpg returns JSONB columns as raw text, not parsed dicts.
+        if isinstance(y.get("row_counts"), str):
+            y["row_counts"] = json.loads(y["row_counts"])
+
+    loaded_years = sorted(r["year"] for r in years)
+    gap_years = []
+    if loaded_years:
+        gap_years = [y for y in range(loaded_years[0], loaded_years[-1] + 1) if y not in loaded_years]
+
+    return {"years": years, "gap_years": gap_years}

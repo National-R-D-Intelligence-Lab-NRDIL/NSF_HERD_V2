@@ -52,3 +52,30 @@ CREATE TABLE IF NOT EXISTS raw_institution_classifications (
     is_epscor       BOOLEAN DEFAULT FALSE,
     updated_at      TIMESTAMP DEFAULT NOW()
 );
+
+-- Tracks which HERD survey years have been loaded and when. Nothing wrote
+-- to this before it existed -- the 2010-2024 data already in the raw_*
+-- tables was copied once from v1's SQLite file, not through any tracked
+-- pipeline (see docs/decisions.md "[Phase 1]"). Backfilled below with
+-- loaded_at left NULL rather than a fabricated date. The ingestion
+-- pipeline (ingestion/) writes a new row here after each successful load.
+CREATE TABLE IF NOT EXISTS data_loads (
+    year        INTEGER PRIMARY KEY,
+    loaded_at   TIMESTAMPTZ,
+    source      TEXT NOT NULL,
+    row_counts  JSONB,
+    notes       TEXT
+);
+
+INSERT INTO data_loads (year, loaded_at, source, row_counts)
+SELECT
+    y.year,
+    NULL,
+    'v1 migration (pre-tracking)',
+    jsonb_build_object(
+        'raw_institutions', (SELECT COUNT(*) FROM raw_institutions WHERE year = y.year),
+        'raw_field_expenditures', (SELECT COUNT(*) FROM raw_field_expenditures WHERE year = y.year),
+        'raw_agency_funding', (SELECT COUNT(*) FROM raw_agency_funding WHERE year = y.year)
+    )
+FROM (SELECT DISTINCT year FROM raw_institutions) y
+ON CONFLICT (year) DO NOTHING;
