@@ -24,10 +24,15 @@ from pydantic import BaseModel
 from auth import get_current_user
 from config import settings
 from db import get_pool, rows_to_dicts
+from rate_limit import check_rate_limit
 
 router = APIRouter(prefix="/qa", tags=["qa"])
 
 _client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+
+# Same limit v1 enforced -- never actually ported to v2 until now.
+_QA_RATE_LIMIT = 50
+_QA_RATE_WINDOW_SECONDS = 3600
 
 
 # ======================================================================
@@ -397,6 +402,8 @@ async def _execute_sql(sql: str):
 async def ask(request: QARequest, user: dict = Depends(get_current_user)):
     if not user.get("ai_enabled", True):
         raise HTTPException(status_code=403, detail="AI feature disabled for this account")
+
+    check_rate_limit(user["user_id"], max_requests=_QA_RATE_LIMIT, window_seconds=_QA_RATE_WINDOW_SECONDS)
 
     context_block = _build_context_block(request)
 

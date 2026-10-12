@@ -18,6 +18,7 @@ async def list_institutions(
     state: str | None = None,
     year: int = 2024,
     limit: int = Query(default=50, le=1500),
+    user: dict = Depends(get_current_user),
 ):
     """List institutions ranked by total R&D for a given year."""
     pool = get_pool()
@@ -35,7 +36,7 @@ async def list_institutions(
 
 
 @router.get("/{inst_id}")
-async def get_institution(inst_id: str, year: int = 2024):
+async def get_institution(inst_id: str, year: int = 2024, user: dict = Depends(get_current_user)):
     pool = get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -49,7 +50,7 @@ async def get_institution(inst_id: str, year: int = 2024):
 
 
 @router.get("/{inst_id}/rank")
-async def get_rank_trend(inst_id: str, start: int = 2019, end: int = 2024):
+async def get_rank_trend(inst_id: str, start: int = 2019, end: int = 2024, user: dict = Depends(get_current_user)):
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -61,7 +62,7 @@ async def get_rank_trend(inst_id: str, start: int = 2019, end: int = 2024):
 
 
 @router.get("/{inst_id}/anchor")
-async def get_anchor_view(inst_id: str, year: int = 2024):
+async def get_anchor_view(inst_id: str, year: int = 2024, user: dict = Depends(get_current_user)):
     """Competitive-band view: target institution plus a handful of anchor
     ranks (#1, #10, #25... and neighbors) for the same year.
 
@@ -102,7 +103,7 @@ async def get_anchor_view(inst_id: str, year: int = 2024):
 
 
 @router.get("/{inst_id}/funding")
-async def get_funding_breakdown(inst_id: str, start: int = 2019, end: int = 2024):
+async def get_funding_breakdown(inst_id: str, start: int = 2019, end: int = 2024, user: dict = Depends(get_current_user)):
     pool = get_pool()
     async with pool.acquire() as conn:
         latest = await conn.fetchrow(
@@ -133,7 +134,7 @@ async def get_funding_breakdown(inst_id: str, start: int = 2019, end: int = 2024
 
 
 @router.get("/{inst_id}/state-rank")
-async def get_state_ranking(inst_id: str, year: int = 2024):
+async def get_state_ranking(inst_id: str, year: int = 2024, user: dict = Depends(get_current_user)):
     pool = get_pool()
     async with pool.acquire() as conn:
         target = await conn.fetchrow(

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from auth import get_current_user
 from db import get_pool, rows_to_dicts
 from services.benchmarker import PeerFilters
 
@@ -14,7 +15,7 @@ def _parse_peer_ids(peer_ids: str | None) -> list[str] | None:
 
 
 @router.get("/{inst_id}")
-async def get_agency_breakdown(inst_id: str, year: int = 2024):
+async def get_agency_breakdown(inst_id: str, year: int = 2024, user: dict = Depends(get_current_user)):
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -31,7 +32,7 @@ async def get_agency_breakdown(inst_id: str, year: int = 2024):
 
 
 @router.get("/{inst_id}/trend")
-async def get_agency_trend(inst_id: str, start: int = 2019, end: int = 2024):
+async def get_agency_trend(inst_id: str, start: int = 2019, end: int = 2024, user: dict = Depends(get_current_user)):
     pool = get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
@@ -43,7 +44,7 @@ async def get_agency_trend(inst_id: str, start: int = 2019, end: int = 2024):
 
 
 @router.get("/{inst_id}/concentration")
-async def get_agency_concentration(inst_id: str, year: int = 2024):
+async def get_agency_concentration(inst_id: str, year: int = 2024, user: dict = Depends(get_current_user)):
     """Herfindahl-Hirschman Index (HHI) of federal funding concentration,
     plus this institution's percentile vs. all others that year."""
     pool = get_pool()
@@ -102,6 +103,7 @@ async def get_agency_peer_comparison(
     carnegie: str | None = None, control: str | None = None, exclude_med: bool = False,
     aau_only: bool = False, aplu_only: bool = False, hbcu_only: bool = False,
     hsi_only: bool = False, epscor_only: bool = False,
+    user: dict = Depends(get_current_user),
 ):
     """How the institution's federal agency mix compares to its peer group's
     average — ported from v1's get_agency_peer_comparison()."""

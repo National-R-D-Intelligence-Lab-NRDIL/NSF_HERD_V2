@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from auth import get_current_user
 from db import get_pool, rows_to_dicts
 from services.benchmarker import PeerFilters
 
@@ -14,7 +15,7 @@ def _parse_peer_ids(peer_ids: str | None) -> list[str] | None:
 
 
 @router.get("/{inst_id}")
-async def get_field_portfolio(inst_id: str, year: int = 2024):
+async def get_field_portfolio(inst_id: str, year: int = 2024, user: dict = Depends(get_current_user)):
     """Parent-field breakdown for an institution (from mart_field_portfolio,
     which dbt already joined against inst_total_rd and computed field_share_pct)."""
     pool = get_pool()
@@ -30,7 +31,7 @@ async def get_field_portfolio(inst_id: str, year: int = 2024):
 
 
 @router.get("/{inst_id}/drilldown")
-async def get_field_drilldown(inst_id: str, parent_field: str, year: int = 2024):
+async def get_field_drilldown(inst_id: str, parent_field: str, year: int = 2024, user: dict = Depends(get_current_user)):
     """Sub-field breakdown for one parent field."""
     pool = get_pool()
     async with pool.acquire() as conn:
@@ -49,7 +50,7 @@ async def get_field_drilldown(inst_id: str, parent_field: str, year: int = 2024)
 
 
 @router.get("/{inst_id}/momentum")
-async def get_field_momentum(inst_id: str, start: int = 2019, end: int = 2024):
+async def get_field_momentum(inst_id: str, start: int = 2019, end: int = 2024, user: dict = Depends(get_current_user)):
     """CAGR per parent field between two years."""
     pool = get_pool()
     years_diff = end - start
@@ -87,6 +88,7 @@ async def get_field_peer_comparison(
     carnegie: str | None = None, control: str | None = None, exclude_med: bool = False,
     aau_only: bool = False, aplu_only: bool = False, hbcu_only: bool = False,
     hsi_only: bool = False, epscor_only: bool = False,
+    user: dict = Depends(get_current_user),
 ):
     """How the institution's field mix (portfolio share %) compares to its peer
     group's average — ported from v1's get_field_peer_comparison(). Peer group is

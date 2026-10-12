@@ -1,12 +1,13 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from auth import get_current_user
 from db import get_pool, rows_to_dicts
 
 router = APIRouter(prefix="/classifications", tags=["classifications"])
 
 
 @router.get("/options")
-async def get_filter_options():
+async def get_filter_options(user: dict = Depends(get_current_user)):
     """Return distinct values for each classification filter (populates dropdowns)."""
     pool = get_pool()
     async with pool.acquire() as conn:
@@ -48,7 +49,7 @@ async def get_filter_options():
 
 
 @router.get("/{inst_id}")
-async def get_classification(inst_id: str):
+async def get_classification(inst_id: str, user: dict = Depends(get_current_user)):
     """Return classification data for a single institution."""
     pool = get_pool()
     async with pool.acquire() as conn:

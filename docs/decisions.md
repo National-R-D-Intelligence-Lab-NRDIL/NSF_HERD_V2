@@ -500,3 +500,33 @@ Beta/roadmap item: "new-year HERD data ingestion pipeline," pulled forward from 
 ### Open questions
 - Not yet tested against a genuinely new (never-before-loaded) year, since none exists yet -- the 2024 re-load is the strongest available proxy, but the true test is whenever NSF actually publishes the next year.
 - `check_new_year.py` is not wired into any schedule/cron yet (VM changes are a separate, explicitly-gated step); Kalyan would need to decide whether/when he wants that automated later.
+
+---
+
+## [Security Hardening] Require login on all data endpoints + missing QA rate limit — 2026-10-12
+
+### What was built
+- Added `Depends(get_current_user)` to every previously-open endpoint in `api/routers/institutions.py`, `peers.py`, `portfolio.py`, `federal.py`, and `classifications.py` — 22 endpoints total. These are the marts/derived-data endpoints (rankings, peer comparisons, field portfolio, federal agency breakdowns, classifications) that dbt/the pipeline transform from NSF's raw public data. `/health` is unchanged (stays open — needed for Docker healthchecks).
+- Switched the matching calls in `frontend/lib/api.ts` from the unauthenticated `getJson` helper to the existing `getJsonAuth` helper (already used by `/qa/ask`, `/briefing`, `/institutions/{id}/insight`). Removed `getJson` itself once nothing called it anymore.
+- Built the `/qa/ask` rate limit (50 requests/hour/user) that this file's "Next Priorities" section had documented as done in v1 but was never actually ported to v2 — found missing while investigating the issue below. New `api/rate_limit.py`: in-memory sliding-window counter keyed by `user_id`. In-memory is fine since the API runs as a single container (`docker-compose.yml` has no replicas); would need a shared store (e.g. Redis) if the API is ever scaled horizontally.
+
+### Why
+Kalyan had a developer friend demo the app, inspect the browser's Network tab, and pull data straight from the API with no login. Investigation confirmed: the AI-backed endpoints (`/qa/ask`, `/briefing`, `/institutions/{id}/insight`, `/institutions/{id}/suggested-questions`) and all of `/admin` were already correctly gated behind a verified Supabase JWT. But the mart/derived-data endpoints were open by deliberate original design (`api/auth.py`'s docstring: "HERD data is public and the institution picker must load before auth resolves on the frontend") — reasoning being the underlying NSF numbers are already public.
+
+Kalyan's follow-up: even though the raw numbers are NSF's public data, the *transformations* that get to one-row-per-institution (rankings, peer-matching, portfolio shares, agency concentration) are the actual product/IP, and he wants those not freely scrapeable by an anonymous, unauthenticated caller. This reverses the "stays open" design decision documented in `api/auth.py` and `CLAUDE.md`.
+
+### Key decisions
+- **Login required, not a harder technical barrier.** Explained to Kalyan directly: if a *logged-in* user can see something rendered in the app, their browser already received that data, and no server-side control stops a determined authorized user from eventually scripting their way to a full copy of what they're shown — that's true of every web app, not fixable in code. What *is* fixable, and was the actual gap, is that **zero login was required at all** — anyone on the internet, no account, no trace, could hit these endpoints directly. Login-gating closes that; it does not and cannot fully solve "an authorized beta user decides to scrape everything they're allowed to see." The real backstop for that remaining risk is the beta agreement/NDA Kalyan's invited users sign, not code.
+- **No frontend UX change for real users.** Confirmed `frontend/app/page.tsx` already redirects to `/login` before rendering anything if there's no session — every legitimate user was already required to log in before seeing the app. This change only closes the gap for someone who skips the UI and hits the API directly.
+- **Rate limit matches the originally-planned v1 parity (50/hour/user)** rather than inventing a new number — this was documented as already done in `CLAUDE.md`'s "Beta Hardening" section but the code never actually had it; this closes that documentation/reality gap. Scoped to `/qa/ask` only (the endpoint CLAUDE.md specifically called out), not expanded to the other LLM-backed endpoints (`/briefing`, `/insight`, `/suggested-questions`) — avoiding scope creep beyond what was identified as missing.
+
+### Alternatives rejected
+- Bot detection / response obfuscation / anti-scraping measures beyond login — rejected as disproportionate engineering for a 10-person invite-only beta, and wouldn't actually stop a determined *authorized* user anyway (see reasoning above).
+- Tightening CORS (`allow_origins=["*"]` in `api/main.py`) — flagged to Kalyan as a secondary, lower-priority finding during this investigation, not yet acted on. Revisit once the production domain (`app.herdintel.app`) is the only expected caller.
+
+### Verification note
+Tested locally: rebuilt `api` + `frontend` containers; confirmed `curl` with no token now returns 401 on `/institutions`, `/peers/{id}`, `/portfolio/{id}`, `/federal/{id}`, and `/classifications/options` (previously 200), while `/health` stays 200. Confirmed in-browser with a real logged-in session that Institution Snapshot, Research Portfolio, Federal Landscape, and peer-pool loading all still work end-to-end through the now-authenticated calls. Rate limiter logic verified in isolation (50 requests pass, 51st returns 429, independent per-user buckets) without making real (paid) Gemini calls.
+
+### Open questions
+- Not yet pushed to GitHub or deployed to the VM — holding per standard process (local build + test done; push and VM deploy are separate, explicitly-gated steps).
+- CORS wildcard (`allow_origins=["*"]`) remains unaddressed; low risk today since every sensitive/now-gated endpoint already requires a valid token regardless of origin, but worth tightening later.

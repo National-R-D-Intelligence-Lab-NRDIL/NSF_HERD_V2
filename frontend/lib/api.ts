@@ -31,15 +31,6 @@ import type {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`${res.status} ${res.statusText}: ${detail}`);
-  }
-  return res.json();
-}
-
 async function getAuthHeaders(): Promise<HeadersInit> {
   if (!supabase) return {};
   try {
@@ -69,23 +60,23 @@ export const listInstitutions = (params: { year?: number; state?: string; limit?
   if (params.year) q.set("year", String(params.year));
   if (params.state) q.set("state", params.state);
   q.set("limit", String(params.limit ?? 1000));
-  return getJson<InstitutionListItem[]>(`/institutions?${q}`);
+  return getJsonAuth<InstitutionListItem[]>(`/institutions?${q}`);
 };
 
 export const getInstitution = (instId: string, year = 2024) =>
-  getJson<InstitutionDetail>(`/institutions/${instId}?year=${year}`);
+  getJsonAuth<InstitutionDetail>(`/institutions/${instId}?year=${year}`);
 
 export const getRankTrend = (instId: string, start = 2019, end = 2024) =>
-  getJson<RankPoint[]>(`/institutions/${instId}/rank?start=${start}&end=${end}`);
+  getJsonAuth<RankPoint[]>(`/institutions/${instId}/rank?start=${start}&end=${end}`);
 
 export const getAnchorView = (instId: string, year = 2024) =>
-  getJson<AnchorResponse>(`/institutions/${instId}/anchor?year=${year}`);
+  getJsonAuth<AnchorResponse>(`/institutions/${instId}/anchor?year=${year}`);
 
 export const getFundingBreakdown = (instId: string, start = 2019, end = 2024) =>
-  getJson<FundingBreakdown>(`/institutions/${instId}/funding?start=${start}&end=${end}`);
+  getJsonAuth<FundingBreakdown>(`/institutions/${instId}/funding?start=${start}&end=${end}`);
 
 export const getStateRanking = (instId: string, year = 2024) =>
-  getJson<StateRanking>(`/institutions/${instId}/state-rank?year=${year}`);
+  getJsonAuth<StateRanking>(`/institutions/${instId}/state-rank?year=${year}`);
 
 export const getStrategicInsight = (
   instId: string,
@@ -118,7 +109,7 @@ export const getPeers = (instId: string, opts: { n?: number; filters?: PeerFilte
   if (opts.n) q.set("n", String(opts.n));
   applyPeerFilters(q, opts.filters);
   const qs = q.toString();
-  return getJson<PeersResponse>(`/peers/${instId}${qs ? `?${qs}` : ""}`);
+  return getJsonAuth<PeersResponse>(`/peers/${instId}${qs ? `?${qs}` : ""}`);
 };
 
 export const getGap = (instId: string, opts: { n?: number; peerIds?: string[]; filters?: PeerFilters } = {}) => {
@@ -127,7 +118,7 @@ export const getGap = (instId: string, opts: { n?: number; peerIds?: string[]; f
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
   applyPeerFilters(q, opts.filters);
   const qs = q.toString();
-  return getJson<GapResponse>(`/peers/${instId}/gap${qs ? `?${qs}` : ""}`);
+  return getJsonAuth<GapResponse>(`/peers/${instId}/gap${qs ? `?${qs}` : ""}`);
 };
 
 export const getPeerTrend = (
@@ -140,7 +131,7 @@ export const getPeerTrend = (
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
   applyPeerFilters(q, opts.filters);
-  return getJson<PeerTrendResponse>(`/peers/${instId}/trend?${q}`);
+  return getJsonAuth<PeerTrendResponse>(`/peers/${instId}/trend?${q}`);
 };
 
 export const getPeerMovement = (
@@ -153,25 +144,25 @@ export const getPeerMovement = (
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
   applyPeerFilters(q, opts.filters);
-  return getJson<PeerMovementResponse>(`/peers/${instId}/movement?${q}`);
+  return getJsonAuth<PeerMovementResponse>(`/peers/${instId}/movement?${q}`);
 };
 
 // --- classifications ---
 export const getClassification = (instId: string) =>
-  getJson<ClassificationData>(`/classifications/${instId}`);
+  getJsonAuth<ClassificationData>(`/classifications/${instId}`);
 
 export const getClassificationOptions = () =>
-  getJson<ClassificationOptions>(`/classifications/options`);
+  getJsonAuth<ClassificationOptions>(`/classifications/options`);
 
 // --- portfolio ---
 export const getFieldPortfolio = (instId: string, year = 2024) =>
-  getJson<FieldPortfolioRow[]>(`/portfolio/${instId}?year=${year}`);
+  getJsonAuth<FieldPortfolioRow[]>(`/portfolio/${instId}?year=${year}`);
 
 export const getFieldDrilldown = (instId: string, parentField: string, year = 2024) =>
-  getJson<FieldDrilldownRow[]>(`/portfolio/${instId}/drilldown?parent_field=${parentField}&year=${year}`);
+  getJsonAuth<FieldDrilldownRow[]>(`/portfolio/${instId}/drilldown?parent_field=${parentField}&year=${year}`);
 
 export const getFieldMomentum = (instId: string, start = 2019, end = 2024) =>
-  getJson<FieldMomentumRow[]>(`/portfolio/${instId}/momentum?start=${start}&end=${end}`);
+  getJsonAuth<FieldMomentumRow[]>(`/portfolio/${instId}/momentum?start=${start}&end=${end}`);
 
 export const getFieldPeerComparison = (
   instId: string,
@@ -182,18 +173,18 @@ export const getFieldPeerComparison = (
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
   applyPeerFilters(q, opts.filters);
-  return getJson<FieldPeerComparisonResponse>(`/portfolio/${instId}/peer-comparison?${q}`);
+  return getJsonAuth<FieldPeerComparisonResponse>(`/portfolio/${instId}/peer-comparison?${q}`);
 };
 
 // --- federal ---
 export const getAgencyBreakdown = (instId: string, year = 2024) =>
-  getJson<AgencyRow[]>(`/federal/${instId}?year=${year}`);
+  getJsonAuth<AgencyRow[]>(`/federal/${instId}?year=${year}`);
 
 export const getAgencyTrend = (instId: string, start = 2019, end = 2024) =>
-  getJson<AgencyTrendRow[]>(`/federal/${instId}/trend?start=${start}&end=${end}`);
+  getJsonAuth<AgencyTrendRow[]>(`/federal/${instId}/trend?start=${start}&end=${end}`);
 
 export const getConcentration = (instId: string, year = 2024) =>
-  getJson<ConcentrationResponse>(`/federal/${instId}/concentration?year=${year}`);
+  getJsonAuth<ConcentrationResponse>(`/federal/${instId}/concentration?year=${year}`);
 
 export const getAgencyPeerComparison = (
   instId: string,
@@ -204,7 +195,7 @@ export const getAgencyPeerComparison = (
   if (opts.n) q.set("n", String(opts.n));
   if (opts.peerIds?.length) q.set("peer_ids", opts.peerIds.join(","));
   applyPeerFilters(q, opts.filters);
-  return getJson<AgencyPeerComparisonResponse>(`/federal/${instId}/peer-comparison?${q}`);
+  return getJsonAuth<AgencyPeerComparisonResponse>(`/federal/${instId}/peer-comparison?${q}`);
 };
 
 export const getSuggestedQuestions = (

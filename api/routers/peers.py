@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from auth import get_current_user
 from db import get_pool, rows_to_dicts
 from services.benchmarker import PeerFilters
 
@@ -51,6 +52,7 @@ async def get_peers(
     hbcu_only: bool = False,
     hsi_only: bool = False,
     epscor_only: bool = False,
+    user: dict = Depends(get_current_user),
 ):
     bench = request.app.state.benchmarker
     filters = _parse_filters(carnegie, control, exclude_med, aau_only, aplu_only, hbcu_only, hsi_only, epscor_only)
@@ -80,6 +82,7 @@ async def get_gap(
     hbcu_only: bool = False,
     hsi_only: bool = False,
     epscor_only: bool = False,
+    user: dict = Depends(get_current_user),
 ):
     bench = request.app.state.benchmarker
     custom = _parse_peer_ids(peer_ids)
@@ -110,6 +113,7 @@ async def get_peer_movement(
     hbcu_only: bool = False,
     hsi_only: bool = False,
     epscor_only: bool = False,
+    user: dict = Depends(get_current_user),
 ):
     bench = request.app.state.benchmarker
     pool = get_pool()
@@ -208,6 +212,7 @@ async def get_trend(
     hbcu_only: bool = False,
     hsi_only: bool = False,
     epscor_only: bool = False,
+    user: dict = Depends(get_current_user),
 ):
     bench = request.app.state.benchmarker
     pool = get_pool()
